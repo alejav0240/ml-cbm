@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cbm.local/schemas/session_manifest.schema.json",
+  "title": "DEMUCA session manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "source_version",
+    "clock",
+    "timeline_policy",
+    "duration_seconds",
+    "participants",
+    "fragments"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "source_version": { "type": "string", "minLength": 1 },
+    "clock": { "const": "session_elapsed_seconds" },
+    "timeline_policy": { "enum": ["contiguous", "preserve_gaps"] },
+    "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["PATIENT", "THERAPIST", "UNKNOWN"] }
+        }
+      }
+    },
+    "fragments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fragment_id",
+          "order",
+          "global_start_seconds",
+          "duration_seconds",
+          "video_path"
+        ],
+        "properties": {
+          "fragment_id": { "type": "string", "minLength": 1 },
+          "order": { "type": "integer", "minimum": 0 },
+          "global_start_seconds": { "type": "number", "minimum": 0 },
+          "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+          "video_path": { "type": "string", "minLength": 1 },
+          "audio_path": { "type": ["string", "null"], "minLength": 1 }
+        }
+      }
+    }
+  }
+}

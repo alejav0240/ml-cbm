@@ -1,0 +1,22 @@
+{
+  "task_definition": {
+    "approved": false,
+    "approved_by": "",
+    "approved_at": ""
+  },
+  "annotation_review": {
+    "approved": false,
+    "approved_by": "",
+    "approved_at": ""
+  },
+  "consent_and_privacy": {
+    "approved": false,
+    "approved_by": "",
+    "approved_at": ""
+  },
+  "patient_split": {
+    "approved": false,
+    "approved_by": "",
+    "approved_at": ""
+  }
+}

@@ -1,0 +1,4 @@
+# Install in a Python environment supported by MediaPipe; the pose model asset is
+# supplied separately and is intentionally not checked into this repository.
+mediapipe>=0.10.20
+opencv-python>=4.10

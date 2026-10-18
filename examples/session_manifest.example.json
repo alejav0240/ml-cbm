@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "session_id": "SYNTHETIC-001",
+  "source_version": "synthetic-v1",
+  "clock": "session_elapsed_seconds",
+  "timeline_policy": "contiguous",
+  "duration_seconds": 10.0,
+  "participants": [
+    { "id": "P001", "role": "PATIENT" },
+    { "id": "T001", "role": "THERAPIST" }
+  ],
+  "fragments": [
+    {
+      "fragment_id": "F001",
+      "order": 0,
+      "global_start_seconds": 0.0,
+      "duration_seconds": 5.0,
+      "video_path": "raw/video/fragment_001.mp4",
+      "audio_path": null
+    },
+    {
+      "fragment_id": "F002",
+      "order": 1,
+      "global_start_seconds": 5.0,
+      "duration_seconds": 5.0,
+      "video_path": "raw/video/fragment_002.mp4",
+      "audio_path": "raw/audio/fragment_002.wav"
+    }
+  ]
+}

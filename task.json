@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "status": "provisional",
+  "task": "observable_event_occurrence",
+  "formulation": "multilabel classification per temporal window",
+  "window_seconds": 5,
+  "label_sources": {
+    "visual": [
+      "MOVIMIENTO",
+      "MOVIMIENTO_REPETITIVO",
+      "CONTACTO_VISUAL",
+      "INTERACCION_OBJETO",
+      "ORIENTACION_CORPORAL"
+    ],
+    "audio": [
+      "VOCALIZACION",
+      "HABLA",
+      "RISA",
+      "LLANTO",
+      "GRITO",
+      "SILENCIO",
+      "ACTIVIDAD_MUSICAL"
+    ],
+    "interaction": [
+      "MIRADA",
+      "GESTO",
+      "TACTO",
+      "IMITACION",
+      "RESPUESTA",
+      "ACTIVIDAD_CONJUNTA",
+      "INTERACCION_MUSICAL",
+      "INTERACCION_VERBAL"
+    ]
+  },
+  "positive_label_rule": "An event overlaps the window, has es_ejemplo=false, and has no source field.",
+  "negative_label_rule": "A label is negative only inside a complete window covered by a done annotation task, which means all applicable modalities were reviewed.",
+  "review_task_requirements": [
+    "status=done",
+    "annotator_primary is present",
+    "reviewer is present",
+    "guide_version is present",
+    "guide_status=approved",
+    "guide_approved_by is present",
+    "guide_approved_at is present"
+  ],
+  "features": [
+    "audio_rms_mean",
+    "audio_zcr_mean",
+    "visual_motion_mean",
+    "visual_motion_max"
+  ],
+  "exclusions": [
+    "DEMUCA clinical scores are not targets in this task.",
+    "Example, machine-proposed, or unverified annotations are not labels.",
+    "This contract does not authorize model training or clinical use."
+  ]
+}
