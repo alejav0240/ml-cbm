@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +42,12 @@ def extract_pose_landmarks(
     output_path: Path,
     sampling_fps: float = 1.0,
     num_poses: int = 4,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
+    if sampling_fps <= 0 or num_poses <= 0:
+        raise ValueError("sampling_fps and num_poses must be positive")
+    if output_path.exists() and not overwrite:
+        raise FileExistsError(f"pose output already exists: {output_path}; pass overwrite=True")
     if not model_asset.is_file():
         raise FileNotFoundError(f"MediaPipe .task model asset not found: {model_asset}")
     frames = sorted(frames_dir.glob(f"{session_id}_*.jpg"))
@@ -55,7 +62,11 @@ def extract_pose_landmarks(
             "install ml/requirements-pose.txt in a supported Python environment."
         ) from error
 
-    model_sha256 = hashlib.sha256(model_asset.read_bytes()).hexdigest()
+    model_digest = hashlib.sha256()
+    with model_asset.open("rb") as model_file:
+        for block in iter(lambda: model_file.read(1024 * 1024), b""):
+            model_digest.update(block)
+    model_sha256 = model_digest.hexdigest()
     options = mp.tasks.vision.PoseLandmarkerOptions(
         base_options=mp.tasks.BaseOptions(model_asset_path=str(model_asset)),
         running_mode=mp.tasks.vision.RunningMode.VIDEO,
@@ -100,6 +111,7 @@ def extract_pose_landmarks(
         "session_id": session_id,
         "generator": "mediapipe-pose-landmarker",
         "model": {"filename": model_asset.name, "sha256": model_sha256},
+        "source_frames_sha256": _hash_frame_sequence(frames),
         "sampling_fps": sampling_fps,
         "frames_total": len(frames),
         "frames_processed": len(results),
@@ -110,5 +122,26 @@ def extract_pose_landmarks(
         "notice": "Pose landmarks are derived features, not clinical labels or identity verification.",
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output_path.name}.", dir=output_path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output_file:
+            json.dump(payload, output_file, indent=2, ensure_ascii=False)
+            output_file.write("\n")
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(f"pose output already exists: {output_path}; pass overwrite=True")
+        os.replace(temporary_name, output_path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
     return payload
+
+
+def _hash_frame_sequence(frames: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for frame_path in frames:
+        digest.update(frame_path.name.encode("utf-8"))
+        digest.update(b"\0")
+        with frame_path.open("rb") as frame_file:
+            for block in iter(lambda: frame_file.read(1024 * 1024), b""):
+                digest.update(block)
+    return digest.hexdigest()
