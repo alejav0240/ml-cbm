@@ -1,6 +1,8 @@
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -70,6 +72,56 @@ class AnalyzeVideoTests(unittest.TestCase):
                 )
 
             self.assertEqual((session / "keep.txt").read_text(encoding="utf-8"), "preserve")
+
+    def test_keeps_pipeline_progress_out_of_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_root = Path(temporary_directory)
+            video = project_root / "incoming.mp4"
+            video.write_bytes(b"video")
+            summary = {
+                "status": "completed",
+                "segments_created": 1,
+                "pose_enabled": False,
+                "pose_frames_processed": 0,
+                "acoustic_windows": 1,
+                "vocalization_candidates": 0,
+                "movement_interaction_status": "skipped_pose_not_available",
+                "artifact_validation": "passed",
+            }
+
+            def noisy_pipeline(*_args: object) -> dict[str, object]:
+                print("extraction progress")
+                return summary
+
+            stdout = io.StringIO()
+            with (
+                patch.object(analyze_video, "probe_duration", return_value=5.0),
+                patch.object(analyze_video, "process_session", side_effect=noisy_pipeline),
+                redirect_stdout(stdout),
+            ):
+                analyze_video.analyze_video(
+                    video, session_id="UPLOAD-002", project_root=project_root
+                )
+
+            self.assertEqual(stdout.getvalue(), "")
+
+    def test_rejects_explicit_missing_pose_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_root = Path(temporary_directory)
+            video = project_root / "incoming.mp4"
+            video.write_bytes(b"video")
+            missing_model = project_root / "missing.task"
+
+            with (
+                patch.object(analyze_video, "probe_duration", return_value=5.0),
+                self.assertRaisesRegex(FileNotFoundError, "pose model not found"),
+            ):
+                analyze_video.analyze_video(
+                    video,
+                    session_id="UPLOAD-003",
+                    project_root=project_root,
+                    pose_model=missing_model,
+                )
 
 
 if __name__ == "__main__":

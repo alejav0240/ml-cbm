@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 import hashlib
 import json
 import os
@@ -64,6 +65,12 @@ def analyze_video(
     if session_dir.exists():
         raise FileExistsError(f"session already exists: {session_dir}")
 
+    default_model = project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task"
+    selected_model = pose_model.resolve() if pose_model is not None else default_model
+    should_skip_pose = skip_pose is True or (pose_model is None and not default_model.is_file())
+    if not should_skip_pose and not selected_model.is_file():
+        raise FileNotFoundError(f"pose model not found: {selected_model}")
+
     duration_seconds = probe_duration(video_path)
     suffix = video_path.suffix.lower() if video_path.suffix else ".mp4"
     staged_video = session_dir / "raw" / f"input{suffix}"
@@ -108,20 +115,16 @@ def analyze_video(
     _write_json_atomic(session_dir / "metadata" / "session.json", metadata)
     _write_json_atomic(session_dir / "session_manifest.json", manifest)
 
-    default_model = project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task"
-    selected_model = pose_model.resolve() if pose_model is not None else default_model
-    should_skip_pose = skip_pose is True or (skip_pose is None and not selected_model.is_file())
-    if not should_skip_pose and not selected_model.is_file():
-        raise FileNotFoundError(f"pose model not found: {selected_model}")
-    summary = process_session(
-        session_id,
-        project_root,
-        window_seconds,
-        max_tail_trim_seconds,
-        None if should_skip_pose else selected_model,
-        should_skip_pose,
-        False,
-    )
+    with redirect_stdout(sys.stderr):
+        summary = process_session(
+            session_id,
+            project_root,
+            window_seconds,
+            max_tail_trim_seconds,
+            None if should_skip_pose else selected_model,
+            should_skip_pose,
+            False,
+        )
 
     demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
     if demuca_path.is_file():
