@@ -31,7 +31,7 @@ Acceptance: emit one provisional DEMUCA estimate per recorded subscale with its 
 - T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
 - T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; commit: `f9c80ce`; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
 - T8 — S3-S4 — inline: execute the official MediaPipe Pose Landmarker on S001 and aggregate real detections through the movement module; status: complete; evidence: 1,441/1,441 frames processed, detections in 1,410 frames, 1,635 pose instances, and 288 movement windows; outputs kept temporary and `training_authorized=false`.
-- T9 — S9 — inline: generate and validate provisional per-subscale DEMUCA estimates as a pipeline artifact; status: implemented; evidence: observed RED import failure, then 3 focused tests pass and S001 emits 14 bounded estimates with artifact validation passing.
+- T9 — S9 — inline: generate and validate provisional per-subscale DEMUCA estimates as a pipeline artifact; status: complete; commit: `ff70b48`; evidence: observed RED import failure, then 3 focused tests and 88 full-suite tests pass; S001 emits 14 bounded estimates with artifact validation passing.
 
 ## Log
 
