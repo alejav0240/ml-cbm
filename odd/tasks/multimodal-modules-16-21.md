@@ -27,6 +27,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T4 — S7-S8 — inline: connect audited outputs to dataset/configuration/documentation without weakening review authorization; status: complete; evidence: hashed summary, `multimodal_features.json`, and fail-closed artifact validator; commits: `53c8017`, `bff4b56`.
 - T5 — S1-S8 — delegated independent verification because the work touches shared pipeline contracts and untested behavior; status: complete; evidence: B1/B2/B3 resolved in scratch, 13 directed tests and real FFmpeg tail probe passed against `bff4b56`.
 - T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
+- T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
 
 ## Log
 
@@ -44,3 +45,5 @@ L11. Final independent recheck against `bff4b56`: B1, B2, and B3 resolved. The 9
 L12. Final local suite after completing pose/manifest provenance: 84 tests pass. Real MediaPipe inference accuracy still requires an external `.task` model and representative session review; this does not block the implemented pipeline contract.
 L13. Follow-up hardening resolved both native-review advisories: the stable index rejects NaN and infinite `window_seconds`, and acoustic/vocalization JSON uses a flushed temporary file plus atomic replacement with cleanup on failure.
 L14. Verification for `5334df3`: 8 focused tests and 86 full-suite tests pass; native assessment is `medium` and `under_budget`, so no additional review transaction is due.
+L15. Final local closure: `requirements-audio.txt` declares NumPy, SciPy, and SoundFile without absorbing unrelated edits in `requirements.txt`; the pipeline summary no longer declares the pose record twice; S001's existing manifest hash was reconciled atomically and its artifact validator now returns `valid=true`, while training remains unauthorized.
+L16. No MediaPipe `.task` asset exists in the workspace, so real pose inference accuracy cannot be re-run locally. This is an external evidence boundary, not an implementation shortcut.

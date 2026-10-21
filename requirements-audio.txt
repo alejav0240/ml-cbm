@@ -1,0 +1,4 @@
+# Runtime dependencies for acoustic features and vocalization candidates.
+numpy>=2.0,<3
+scipy>=1.14,<2
+soundfile>=0.13,<1

@@ -1,5 +1,15 @@
 # Multimodal pipeline modules 16–21
 
+Install the acoustic runtime dependencies before running extraction:
+
+```bash
+python -m pip install -r ml/requirements-audio.txt
+```
+
+Pose extraction additionally requires `ml/requirements-pose.txt` and a
+MediaPipe Pose Landmarker `.task` model supplied with `--pose-model`. The model
+asset is intentionally not stored in this repository.
+
 Run the local session pipeline with an explicit MediaPipe model:
 
 ```bash
