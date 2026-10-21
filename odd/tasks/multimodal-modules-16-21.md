@@ -26,6 +26,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T3 — S5-S6 — inline: integrate acoustic features and vocalization candidates with dedicated tests; status: complete; commit: `f6e58b3`.
 - T4 — S7-S8 — inline: connect audited outputs to dataset/configuration/documentation without weakening review authorization; status: complete; evidence: hashed summary, `multimodal_features.json`, and fail-closed artifact validator; commits: `53c8017`, `bff4b56`.
 - T5 — S1-S8 — delegated independent verification because the work touches shared pipeline contracts and untested behavior; status: complete; evidence: B1/B2/B3 resolved in scratch, 13 directed tests and real FFmpeg tail probe passed against `bff4b56`.
+- T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
 
 ## Log
 
@@ -41,3 +42,5 @@ L9. Correction: acoustic extraction now accepts the exact stable-window count; r
 L10. Post-correction checks: 14 focused tests and 83 full-suite tests pass; Python compilation and `git diff --check` pass. Independent blocker-only recheck remains pending.
 L11. Final independent recheck against `bff4b56`: B1, B2, and B3 resolved. The 9.9-second video/10-second audio probe now yields one stable and one acoustic window with no tail reference; incompatible reused artifacts fail without changing session hashes; corrupt pose or manifest artifacts fail closed.
 L12. Final local suite after completing pose/manifest provenance: 84 tests pass. Real MediaPipe inference accuracy still requires an external `.task` model and representative session review; this does not block the implemented pipeline contract.
+L13. Follow-up hardening resolved both native-review advisories: the stable index rejects NaN and infinite `window_seconds`, and acoustic/vocalization JSON uses a flushed temporary file plus atomic replacement with cleanup on failure.
+L14. Verification for `5334df3`: 8 focused tests and 86 full-suite tests pass; native assessment is `medium` and `under_budget`, so no additional review transaction is due.
