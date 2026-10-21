@@ -28,6 +28,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T5 — S1-S8 — delegated independent verification because the work touches shared pipeline contracts and untested behavior; status: complete; evidence: B1/B2/B3 resolved in scratch, 13 directed tests and real FFmpeg tail probe passed against `bff4b56`.
 - T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
 - T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; commit: `f9c80ce`; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
+- T8 — S3-S4 — inline: execute the official MediaPipe Pose Landmarker on S001 and aggregate real detections through the movement module; status: complete; evidence: 1,441/1,441 frames processed, detections in 1,410 frames, 1,635 pose instances, and 288 movement windows; outputs kept temporary and `training_authorized=false`.
 
 ## Log
 
@@ -46,4 +47,5 @@ L12. Final local suite after completing pose/manifest provenance: 84 tests pass.
 L13. Follow-up hardening resolved both native-review advisories: the stable index rejects NaN and infinite `window_seconds`, and acoustic/vocalization JSON uses a flushed temporary file plus atomic replacement with cleanup on failure.
 L14. Verification for `5334df3`: 8 focused tests and 86 full-suite tests pass; native assessment is `medium` and `under_budget`, so no additional review transaction is due.
 L15. Final local closure: `requirements-audio.txt` declares NumPy, SciPy, and SoundFile without absorbing unrelated edits in `requirements.txt`; the pipeline summary no longer declares the pose record twice; S001's existing manifest hash was reconciled atomically and its artifact validator now returns `valid=true`, while training remains unauthorized.
-L16. No MediaPipe `.task` asset exists in the workspace, so real pose inference accuracy cannot be re-run locally. This is an external evidence boundary, not an implementation shortcut.
+L16. Real pose inference initially lacked a MediaPipe `.task` asset; the user explicitly authorized downloading the official model to resolve that execution boundary.
+L17. After explicit download authorization, the official full float16 Pose Landmarker was stored under ignored `ml/artifacts/models/` with SHA-256 `4eaa5eb7a98365221087693fcc286334cf0858e2eb6e15b506aa4a7ecdcec4ad`. A Python 3.12 MediaPipe run processed all 1,441 S001 frames without skips, detected poses in 1,410 frames (1,635 instances), and produced 288 provisional movement windows. This proves executable integration, not clinical correctness or label validity.
