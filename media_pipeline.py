@@ -200,7 +200,7 @@ def process_session(
     demuca_estimates_path = session_dir / "processed" / "features" / "demuca_estimates.json"
     demuca_source_path = session_dir / "annotations" / "demuca" / "evaluations.json"
     demuca_estimates = (
-        write_demuca_estimates(session_dir, demuca_estimates_path)
+        write_demuca_estimates(session_dir, demuca_estimates_path, overwrite=overwrite)
         if demuca_source_path.is_file()
         else None
     )

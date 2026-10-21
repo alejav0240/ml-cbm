@@ -146,7 +146,12 @@ def build_demuca_estimates(
     }
 
 
-def write_demuca_estimates(session_dir: Path, output_path: Path) -> dict[str, Any]:
+def write_demuca_estimates(
+    session_dir: Path,
+    output_path: Path,
+    *,
+    overwrite: bool = False,
+) -> dict[str, Any]:
     source_path = session_dir / "annotations" / "demuca" / "evaluations.json"
     payload = json.loads(source_path.read_text(encoding="utf-8"))
     metadata = json.loads(
@@ -162,12 +167,35 @@ def write_demuca_estimates(session_dir: Path, output_path: Path) -> dict[str, An
         }.items()
         if path.is_file()
     }
+    source_sha256 = sha256_file(source_path)
+    if output_path.exists() and not overwrite:
+        try:
+            existing = json.loads(output_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise FileExistsError(
+                f"stale DEMUCA estimate output exists: {output_path}; pass --overwrite"
+            ) from error
+        if (
+            not isinstance(existing, dict)
+            or existing.get("session_id") != session_dir.name
+            or existing.get("source_evaluation_sha256") != source_sha256
+            or existing.get("calibration_status") != "not_calibrated"
+            or existing.get("ground_truth") is not False
+            or existing.get("training_authorized") is not False
+            or not isinstance(existing.get("estimates"), list)
+            or not existing["estimates"]
+        ):
+            raise FileExistsError(
+                f"stale DEMUCA estimate output exists: {output_path}; pass --overwrite"
+            )
+        return existing
+
     result = build_demuca_estimates(
         payload,
         session_id=session_dir.name,
         duration_seconds=duration,
         available_modalities=available_modalities,
-        source_sha256=sha256_file(source_path),
+        source_sha256=source_sha256,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -192,10 +220,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session_dir", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     output = args.out or args.session_dir / "processed" / "features" / "demuca_estimates.json"
     try:
-        result = write_demuca_estimates(args.session_dir, output)
+        result = write_demuca_estimates(args.session_dir, output, overwrite=args.overwrite)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(f"[ERROR] DEMUCA estimate generation failed: {error}")
         return 2
