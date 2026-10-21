@@ -47,7 +47,7 @@ def run_existing_extraction(
             str(scripts_dir / script_name),
             session_id,
             "--raiz",
-            str(project_root),
+            str(project_root / "dataset"),
         ]
         if overwrite or force_overwrite:
             command.append("--sobrescribir")
@@ -491,9 +491,21 @@ def synchronize_pose_with_segments(
     segment_manifest: dict[str, Any],
     pose_payload: dict[str, Any] | None,
     pose_features_path: str | None,
+    *,
+    acoustic_payload: dict[str, Any] | None = None,
+    acoustic_features_path: str | None = None,
+    vocalization_payload: dict[str, Any] | None = None,
+    vocalization_features_path: str | None = None,
+    movement_payload: dict[str, Any] | None = None,
+    movement_features_path: str | None = None,
 ) -> dict[str, Any]:
-    """Join timestamped pose frames to audio/video windows on session time."""
+    """Join timestamped derived modalities to audio/video windows on session time."""
     pose_frames = pose_payload.get("frames", []) if pose_payload else []
+    acoustic_windows = acoustic_payload.get("windows", []) if acoustic_payload else []
+    vocalization_candidates = (
+        vocalization_payload.get("candidates", []) if vocalization_payload else []
+    )
+    movement_windows = movement_payload.get("windows", []) if movement_payload else []
     synchronized_segments = []
     for segment in segment_manifest.get("segments", []):
         start = float(segment["start_seconds"])
@@ -503,10 +515,37 @@ def synchronize_pose_with_segments(
             for index, frame in enumerate(pose_frames)
             if start <= float(frame["timestamp_seconds"]) < end
         ]
+        acoustic_indices = [
+            index
+            for index, window in enumerate(acoustic_windows)
+            if start <= float(window["timestamp_seconds"]) < end
+        ]
+        vocalization_indices = [
+            index
+            for index, candidate in enumerate(vocalization_candidates)
+            if float(candidate["start_seconds"]) < end
+            and float(candidate["end_seconds"]) > start
+        ]
+        expected_window_id = f"{segment_manifest['session_id']}_W{int(segment['index']):04d}"
+        movement_indices = [
+            index
+            for index, window in enumerate(movement_windows)
+            if window.get("window_id") == expected_window_id
+        ]
+        if len(movement_indices) > 1:
+            raise ValueError(f"duplicate_movement_window:{expected_window_id}")
         synchronized_segments.append({
             **segment,
             "pose_features_path": pose_features_path if pose_payload else None,
             "pose_frame_indices": pose_indices,
+            "acoustic_features_path": acoustic_features_path if acoustic_payload else None,
+            "acoustic_window_indices": acoustic_indices,
+            "vocalization_features_path": (
+                vocalization_features_path if vocalization_payload else None
+            ),
+            "vocalization_candidate_indices": vocalization_indices,
+            "movement_features_path": movement_features_path if movement_payload else None,
+            "movement_window_index": movement_indices[0] if movement_indices else None,
         })
     return {
         "schema_version": "1.0",
@@ -519,5 +558,10 @@ def synchronize_pose_with_segments(
         "max_segment_drift_seconds": segment_manifest["max_segment_drift_seconds"],
         "pose_sampling_fps": pose_payload.get("sampling_fps") if pose_payload else None,
         "pose_features_path": pose_features_path if pose_payload else None,
+        "acoustic_features_path": acoustic_features_path if acoustic_payload else None,
+        "vocalization_features_path": (
+            vocalization_features_path if vocalization_payload else None
+        ),
+        "movement_features_path": movement_features_path if movement_payload else None,
         "segments": synchronized_segments,
     }
