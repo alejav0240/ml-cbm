@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 import hashlib
 import json
 import os
@@ -21,6 +21,21 @@ from media_pipeline import process_session
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+@contextmanager
+def _pipeline_progress_to_stderr():
+    """Keep Python and inherited process progress away from JSON stdout."""
+    sys.stdout.flush()
+    saved_stdout = os.dup(1)
+    try:
+        os.dup2(2, 1)
+        with redirect_stdout(sys.stderr):
+            yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(saved_stdout, 1)
+        os.close(saved_stdout)
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -115,7 +130,7 @@ def analyze_video(
     _write_json_atomic(session_dir / "metadata" / "session.json", metadata)
     _write_json_atomic(session_dir / "session_manifest.json", manifest)
 
-    with redirect_stdout(sys.stderr):
+    with _pipeline_progress_to_stderr():
         summary = process_session(
             session_id,
             project_root,

@@ -1,5 +1,8 @@
 import json
 import io
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -90,20 +93,31 @@ class AnalyzeVideoTests(unittest.TestCase):
             }
 
             def noisy_pipeline(*_args: object) -> dict[str, object]:
-                print("extraction progress")
+                subprocess.run(
+                    [sys.executable, "-c", "print('extraction progress')"], check=True
+                )
                 return summary
 
-            stdout = io.StringIO()
-            with (
-                patch.object(analyze_video, "probe_duration", return_value=5.0),
-                patch.object(analyze_video, "process_session", side_effect=noisy_pipeline),
-                redirect_stdout(stdout),
-            ):
-                analyze_video.analyze_video(
-                    video, session_id="UPLOAD-002", project_root=project_root
-                )
-
-            self.assertEqual(stdout.getvalue(), "")
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+                saved_stdout = os.dup(1)
+                try:
+                    sys.stdout.flush()
+                    os.dup2(stdout.fileno(), 1)
+                    with (
+                        patch.object(analyze_video, "probe_duration", return_value=5.0),
+                        patch.object(
+                            analyze_video, "process_session", side_effect=noisy_pipeline
+                        ),
+                        redirect_stdout(io.StringIO()),
+                    ):
+                        analyze_video.analyze_video(
+                            video, session_id="UPLOAD-002", project_root=project_root
+                        )
+                finally:
+                    os.dup2(saved_stdout, 1)
+                    os.close(saved_stdout)
+                stdout.seek(0)
+                self.assertEqual(stdout.read(), "")
 
     def test_rejects_explicit_missing_pose_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
