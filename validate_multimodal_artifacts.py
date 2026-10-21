@@ -37,13 +37,15 @@ def validate_multimodal_artifacts(session_dir: Path) -> list[str]:
         return [*issues, "derived_artifacts_missing"]
     loaded: dict[str, dict[str, Any]] = {}
     for name in (
+        "pose_landmarks",
         "stable_window_index",
         "acoustic_features",
         "vocalization_candidates",
         "movement_interaction",
+        "multimodal_manifest",
     ):
         record = artifacts.get(name)
-        if record is None and name == "movement_interaction":
+        if record is None and name in {"pose_landmarks", "movement_interaction"}:
             continue
         if not isinstance(record, dict):
             issues.append(f"artifact_record_missing:{name}")
@@ -77,6 +79,12 @@ def validate_multimodal_artifacts(session_dir: Path) -> list[str]:
         payload = loaded.get(name)
         if payload is not None and payload.get("training_authorized") is not False:
             issues.append(f"provisional_training_flag_invalid:{name}")
+    pose = loaded.get("pose_landmarks")
+    if pose is not None and pose.get("session_id") != session_dir.name:
+        issues.append("pose_session_id_mismatch")
+    manifest = loaded.get("multimodal_manifest")
+    if manifest is not None and manifest.get("session_id") != session_dir.name:
+        issues.append("multimodal_manifest_session_id_mismatch")
     return issues
 
 

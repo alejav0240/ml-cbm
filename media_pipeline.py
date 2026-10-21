@@ -223,6 +223,15 @@ def process_session(
             str(movement_path.relative_to(session_dir)) if movement_status != "skipped_pose_not_available" else None
         ),
         "derived_artifacts": {
+            "pose_landmarks": (
+                {
+                    "path": str(pose_path.relative_to(session_dir)),
+                    "sha256": sha256_feature_file(pose_path),
+                    "training_authorized": False,
+                }
+                if pose_result is not None
+                else None
+            ),
             "stable_window_index": {
                 "path": "processed/windows/windows.json",
                 "sha256": sha256_feature_file(
@@ -257,6 +266,10 @@ def process_session(
                 if movement_payload is not None
                 else None
             ),
+            "multimodal_manifest": {
+                "path": str(multimodal_manifest_path.relative_to(session_dir)),
+                "sha256": sha256_feature_file(multimodal_manifest_path),
+            },
         },
         "multimodal_manifest": str(multimodal_manifest_path.relative_to(session_dir)),
         "multimodal_manifest_sha256": sha256_feature_file(multimodal_manifest_path),

@@ -18,10 +18,12 @@ class MultimodalArtifactValidationTests(unittest.TestCase):
             windows_dir.mkdir(parents=True)
             segments.mkdir(parents=True)
             payloads = {
+                "pose_landmarks": (features / "pose_landmarks.json", {"session_id": "S001", "frames": [], "training_authorized": False}),
                 "stable_window_index": (windows_dir / "windows.json", {"windows": [{"window_id": "S001_W0000"}]}),
                 "acoustic_features": (features / "acoustic_features.json", {"windows": [{"timestamp_seconds": 2.5}]}),
                 "vocalization_candidates": (features / "vocalization_candidates.json", {"candidates": [], "training_authorized": False}),
                 "movement_interaction": (features / "movement_interaction.json", {"windows": [{"window_id": "S001_W0000"}], "training_authorized": False}),
+                "multimodal_manifest": (segments / "multimodal_manifest.json", {"session_id": "S001", "segments": []}),
             }
             records = {}
             for name, (path, payload) in payloads.items():

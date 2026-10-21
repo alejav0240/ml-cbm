@@ -113,12 +113,14 @@ def extract_pose_landmarks(
         "model": {"filename": model_asset.name, "sha256": model_sha256},
         "source_frames_sha256": _hash_frame_sequence(frames),
         "sampling_fps": sampling_fps,
+        "num_poses": num_poses,
         "frames_total": len(frames),
         "frames_processed": len(results),
         "frames_skipped": skipped_frames,
         "landmark_count_per_pose": 33,
         "timestamps_reference": "seconds from the start of the normalized video",
         "frames": results,
+        "training_authorized": False,
         "notice": "Pose landmarks are derived features, not clinical labels or identity verification.",
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +135,39 @@ def extract_pose_landmarks(
     finally:
         if os.path.exists(temporary_name):
             os.unlink(temporary_name)
+    return payload
+
+
+def load_pose_landmarks(
+    frames_dir: Path,
+    session_id: str,
+    model_asset: Path,
+    input_path: Path,
+    *,
+    sampling_fps: float = 1.0,
+    num_poses: int = 4,
+) -> dict[str, Any]:
+    """Reuse pose output only if model and ordered frame hashes still match."""
+    if not model_asset.is_file():
+        raise FileNotFoundError(f"MediaPipe .task model asset not found: {model_asset}")
+    frames = sorted(frames_dir.glob(f"{session_id}_*.jpg"))
+    if not frames:
+        raise FileNotFoundError(f"no extracted frames found in {frames_dir}")
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("session_id") != session_id:
+        raise ValueError("pose_artifact_session_mismatch")
+    model_sha256 = hashlib.sha256(model_asset.read_bytes()).hexdigest()
+    if payload.get("model", {}).get("sha256") != model_sha256:
+        raise ValueError("pose_artifact_model_hash_mismatch")
+    if payload.get("source_frames_sha256") != _hash_frame_sequence(frames):
+        raise ValueError("pose_artifact_source_frames_hash_mismatch")
+    if (
+        float(payload.get("sampling_fps", -1)) != sampling_fps
+        # v1 pose artifacts created before num_poses was recorded used the API default.
+        or int(payload.get("num_poses", 4)) != num_poses
+        or not isinstance(payload.get("frames"), list)
+    ):
+        raise ValueError("pose_artifact_configuration_mismatch")
     return payload
 
 
