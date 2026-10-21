@@ -9,6 +9,24 @@ from media import synchronize_pose_with_segments
 
 
 class MediaPipelineTests(unittest.TestCase):
+    def test_audio_artifact_write_is_atomic_when_replacement_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "features" / "acoustic_features.json"
+            output_path.parent.mkdir(parents=True)
+            output_path.write_text("preserved\n", encoding="utf-8")
+
+            with patch.object(media_pipeline.os, "replace", side_effect=OSError("interrupted")):
+                with self.assertRaisesRegex(OSError, "interrupted"):
+                    media_pipeline.persist_or_reuse_audio_artifact(
+                        output_path,
+                        {"source_audio_sha256": "new-hash", "windows": []},
+                        source_audio_sha256="new-hash",
+                        overwrite=True,
+                    )
+
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "preserved\n")
+            self.assertEqual(list(output_path.parent.iterdir()), [output_path])
+
     def test_rejects_reusing_acoustic_features_from_a_different_window_grid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             project_root = Path(temporary_directory)

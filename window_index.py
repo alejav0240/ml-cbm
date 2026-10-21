@@ -221,7 +221,12 @@ def validate_window_index(index: dict[str, Any], session_dir: Path) -> list[str]
     if not isinstance(windows, list) or not windows:
         issues.append("windows_missing_or_empty")
         return issues
-    if isinstance(window_seconds, bool) or not isinstance(window_seconds, (int, float)) or window_seconds <= 0:
+    if (
+        isinstance(window_seconds, bool)
+        or not isinstance(window_seconds, (int, float))
+        or not math.isfinite(window_seconds)
+        or window_seconds <= 0
+    ):
         issues.append("invalid_window_seconds")
         return issues
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,26 @@ from window_index import validate_window_index
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Replace a JSON artifact only after its complete contents reach disk."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+            temporary_file.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def load_or_create_window_index(session_dir: Path, *, overwrite: bool) -> dict[str, Any]:
@@ -72,11 +94,7 @@ def persist_or_reuse_audio_artifact(
                 f"stale audio feature output exists: {output_path}; pass --overwrite"
             )
         return payload
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(generated_payload, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    _atomic_write_json(output_path, generated_payload)
     return generated_payload
 
 

@@ -84,6 +84,18 @@ class WindowIndexTests(unittest.TestCase):
         self.assertIn("unstable_window_id:0", issues)
         self.assertIn("source_hash_mismatch:processed/features/audio_features.json", issues)
 
+    def test_validator_rejects_non_finite_window_seconds(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = self._session(Path(temp_dir))
+            index = build_window_index(session)
+
+            for invalid_value in (float("nan"), float("inf"), float("-inf")):
+                invalid_index = dict(index, window_seconds=invalid_value)
+                self.assertIn(
+                    "invalid_window_seconds",
+                    validate_window_index(invalid_index, session),
+                )
+
     def test_writer_refuses_to_replace_existing_index_without_flag(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
