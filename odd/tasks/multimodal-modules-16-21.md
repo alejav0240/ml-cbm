@@ -27,7 +27,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T4 — S7-S8 — inline: connect audited outputs to dataset/configuration/documentation without weakening review authorization; status: complete; evidence: hashed summary, `multimodal_features.json`, and fail-closed artifact validator; commits: `53c8017`, `bff4b56`.
 - T5 — S1-S8 — delegated independent verification because the work touches shared pipeline contracts and untested behavior; status: complete; evidence: B1/B2/B3 resolved in scratch, 13 directed tests and real FFmpeg tail probe passed against `bff4b56`.
 - T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
-- T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
+- T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; commit: `f9c80ce`; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
 
 ## Log
 
