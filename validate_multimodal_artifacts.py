@@ -55,6 +55,11 @@ def validate_multimodal_artifacts(session_dir: Path) -> list[str]:
             issues.append(f"unsafe_artifact_path:{name}")
             continue
         path = session_dir / relative
+        try:
+            path.resolve().relative_to(session_dir.resolve())
+        except (OSError, ValueError):
+            issues.append(f"unsafe_artifact_path:{name}")
+            continue
         if not path.is_file():
             issues.append(f"artifact_missing:{name}")
             continue

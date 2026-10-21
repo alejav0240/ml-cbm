@@ -45,6 +45,17 @@ class MultimodalArtifactValidationTests(unittest.TestCase):
                 validate_multimodal_artifacts(session),
             )
 
+            acoustic_path, acoustic_payload = payloads["acoustic_features"]
+            acoustic_path.write_text(json.dumps(acoustic_payload), encoding="utf-8")
+            external = Path(temporary_directory) / "external.json"
+            external.write_bytes(acoustic_path.read_bytes())
+            acoustic_path.unlink()
+            acoustic_path.symlink_to(external)
+            self.assertIn(
+                "unsafe_artifact_path:acoustic_features",
+                validate_multimodal_artifacts(session),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
