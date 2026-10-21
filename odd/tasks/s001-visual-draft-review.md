@@ -8,11 +8,13 @@ S1. Review all 576 samples in `dataset/dataset/sessions/S001/processed/vision/re
 S2. Preserve the user's constraint: "anotaciones preliminares manteniéndolas marcadas como pendientes de aprobación humana"; never set canonical `review_status=reviewed`, never populate canonical ground truth, and never claim clinical or human approval.
 S3. Keep every draft traceable to `sample_id`, timestamp, stable `window_id`, source prediction, reviewer identity `AI_DRAFT`, and a confidence/uncertainty note.
 S4. Validate counts, source hashes, schema, and that the canonical `review_frames.csv` remains byte-identical.
+S5. Continue this phase with an explicitly provisional `AI_DRAFT` dataset path. It must remain separate from canonical ground truth, carry `training_authorized=false`, and never claim clinical validity.
 
 ## Tasks
 
 - T1 — S1-S3 — delegated read-only visual review in three disjoint 192-sample ranges; status: complete; evidence: 576 unique ordered JSONL drafts.
 - T2 — S2-S4 — inline merge, validation, and report; status: complete; evidence: canonical validator valid, 0/576 human-reviewed, canonical SHA-256 unchanged; commit: `7c545da`.
+- T3 — S5 — inline provisional dataset integration and validation; status: complete; route: direct inline because the data contract was already mapped; evidence: 288 windows, 68 tests passing, `training_authorized=false`; commit: pending.
 
 ## Log
 
@@ -27,3 +29,7 @@ L8. Draft outcome: 246 `prediction_visually_plausible`, 330 `needs_human_review`
 L9. Canonical validation remains intentionally incomplete: valid=true, reviewed_rows=0, pending_rows=576, metrics_ready=false. Canonical CSV SHA-256 remained `619f509032ebb7bdb8238c38a393b32c8fa8b915e785bbf697e3f96546e4ec7a`.
 L10. Notable manual-review priorities: opening frame merges two people in one box; frames VR0285 and VR0374 contain missed/clipped people; musical/therapy equipment frequently receives questionable COCO labels; partly occluded children need manual confirmation.
 L11. Work-unit record committed as `7c545da` (`docs(ml): record S001 visual draft review`); dataset drafts remain intentionally uncommitted and ignored.
+L12. User decision verbatim: "saltaate las e\revisiones humanas para esta fase y continua"
+L13. User authorized the safe interpretation: continue with `AI_DRAFT` in a provisional research-only path, separate from the canonical pipeline and with `training_authorized=false`.
+L14. `provisional_dataset.py` generated 288 anonymous window rows and a source-hashed manifest. Of 288 windows, 141 contain at least one sample flagged for human review; the mean flagged-sample fraction is 0.480109. The artifact is not connected to `run_pipeline.py`.
+L15. Verification: focused RED failed before implementation; focused GREEN passed 3 tests; the full suite passed 68 tests; `git diff --check` passed.
