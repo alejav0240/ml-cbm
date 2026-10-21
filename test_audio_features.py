@@ -43,6 +43,24 @@ class AudioFeatureTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "audio_must_be_nonempty"):
                 extract_audio_modalities(audio_path)
 
+    def test_limits_acoustic_windows_to_the_stable_multimodal_grid(self) -> None:
+        sample_rate = 8_000
+        audio = np.zeros(sample_rate * 10, dtype=np.float32)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            audio_path = Path(temporary_directory) / "S001" / "processed" / "audio" / "S001.wav"
+            audio_path.parent.mkdir(parents=True)
+            sf.write(audio_path, audio, sample_rate)
+
+            features, _ = extract_audio_modalities(
+                audio_path,
+                window_seconds=5.0,
+                expected_complete_windows=1,
+            )
+
+        self.assertEqual(features["complete_windows"], 1)
+        self.assertEqual(features["tail_samples_excluded"], sample_rate * 5)
+        self.assertEqual(len(features["windows"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

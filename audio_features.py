@@ -181,6 +181,7 @@ def extract_audio_modalities(
     *,
     window_seconds: float = 1.0,
     min_rms: float = 0.003,
+    expected_complete_windows: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Create 1-second acoustic features and provisional voiced-sound intervals."""
     if not math.isfinite(window_seconds) or window_seconds <= 0:
@@ -198,7 +199,18 @@ def extract_audio_modalities(
         raise ValueError("window_too_short_for_sample_rate")
     mel_bank = _mel_filterbank(sample_rate, 1 << (round(sample_rate * 0.025) - 1).bit_length())
     feature_records = []
-    complete_windows = len(audio) // window_samples
+    available_complete_windows = len(audio) // window_samples
+    if expected_complete_windows is None:
+        complete_windows = available_complete_windows
+    elif (
+        isinstance(expected_complete_windows, bool)
+        or not isinstance(expected_complete_windows, int)
+        or expected_complete_windows < 0
+        or expected_complete_windows > available_complete_windows
+    ):
+        raise ValueError("expected_complete_windows_exceeds_audio")
+    else:
+        complete_windows = expected_complete_windows
     for index in range(complete_windows):
         start = index * window_samples
         chunk = audio[start:start + window_samples]
@@ -230,7 +242,7 @@ def extract_audio_modalities(
         "sample_rate": sample_rate,
         "window_seconds": window_seconds,
         "complete_windows": complete_windows,
-        "tail_samples_excluded": len(audio) % window_samples,
+        "tail_samples_excluded": len(audio) - complete_windows * window_samples,
         "features": [
             "rms_energy", "zero_crossing_rate", "spectral_centroid_hz",
             "spectral_bandwidth_hz", "spectral_rolloff_85_hz", "spectral_flatness",
@@ -239,6 +251,7 @@ def extract_audio_modalities(
         ],
         "timestamps_reference": "seconds from the start of normalized session audio",
         "windows": feature_records,
+        "training_authorized": False,
         "notice": "Acoustic descriptors are not event labels, clinical scores, or speaker identity.",
     }
     intervals = _candidate_intervals(pitch_records)

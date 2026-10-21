@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "window_seconds": 5,
+  "artifacts": {
+    "pose": {
+      "path": "processed/features/pose_landmarks.json",
+      "dataset_eligible": true,
+      "semantic_status": "derived_geometry"
+    },
+    "movement_interaction": {
+      "path": "processed/features/movement_interaction.json",
+      "dataset_eligible": false,
+      "semantic_status": "provisional_unreviewed"
+    },
+    "vocalization_candidates": {
+      "path": "processed/features/vocalization_candidates.json",
+      "dataset_eligible": false,
+      "semantic_status": "provisional_unreviewed"
+    },
+    "acoustic_features": {
+      "path": "processed/features/acoustic_features.json",
+      "dataset_eligible": true,
+      "semantic_status": "derived_signal"
+    }
+  },
+  "training_authorized": false,
+  "notice": "This contract registers derived artifacts; it does not promote provisional candidates to labels or authorize training."
+}

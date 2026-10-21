@@ -24,7 +24,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T1 — S1-S2 — inline: formalize and verify extraction, segmentation, synchronization, manifests, and provenance; status: complete; evidence: shared stable-window grid and synchronized manifest tests; commit: pending final orchestration commit.
 - T2 — S3-S4 — inline: integrate pose-derived movement and proximity features with dedicated tests; status: complete; commits: `6a781df`, `6e3dde5`.
 - T3 — S5-S6 — inline: integrate acoustic features and vocalization candidates with dedicated tests; status: complete; commit: `f6e58b3`.
-- T4 — S7-S8 — inline: connect audited outputs to dataset/configuration/documentation without weakening review authorization; status: pending; commit: pending.
+- T4 — S7-S8 — inline: connect audited outputs to dataset/configuration/documentation without weakening review authorization; status: complete; evidence: hashed summary, `multimodal_features.json`, and fail-closed artifact validator; commit: pending correction commit.
 - T5 — S1-S8 — delegated independent verification because the work touches shared pipeline contracts and untested behavior; status: pending.
 
 ## Log
@@ -36,3 +36,6 @@ L4. Semantic constraint: pitch-based events are vocalization candidates, not ver
 L5. Delivery forecast exceeds 400 authored lines across four cohesive work units; strategy inherited from the user's explicit choice: `feature-branch-chain`.
 L6. Chain boundaries created locally: `feat/multimodal-pose-sync` -> `feat/multimodal-audio` -> `feat/multimodal-movement`; orchestration is the next child boundary. No branch was pushed and no pull request was created.
 L7. Test-first evidence: the shared acoustic window assertion failed before orchestration correction; multimodal manifest alignment and stale-window reuse assertions failed before their implementations. Focused module tests now pass.
+L8. Independent verification found three blockers: acoustic windows could exceed the stable grid after source-tail trimming; reused artifacts could diverge from regenerated manifest references; and downstream artifact auditing/configuration was incomplete.
+L9. Correction: acoustic extraction now accepts the exact stable-window count; reuse validates and returns persisted payloads coherently; the pipeline records hashes and runs `validate_multimodal_artifacts.py`; `multimodal_features.json` explicitly separates eligible derived signals from provisional candidates.
+L10. Post-correction checks: 14 focused tests and 83 full-suite tests pass; Python compilation and `git diff --check` pass. Independent blocker-only recheck remains pending.

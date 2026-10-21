@@ -20,9 +20,10 @@ from movement_interaction import (
     build_movement_interaction_features,
     sha256_file as sha256_feature_file,
 )
-from pose import extract_pose_landmarks
+from pose import extract_pose_landmarks, load_pose_landmarks
 from pipeline_graph import write_pipeline_graph
 from tracking import log_run
+from validate_multimodal_artifacts import validate_multimodal_artifacts
 from window_index import validate_window_index
 
 
@@ -39,6 +40,44 @@ def load_or_create_window_index(session_dir: Path, *, overwrite: bool) -> dict[s
             raise ValueError("window_index_validation_failed:" + ";".join(issues))
         return payload
     return write_window_index(session_dir, output_path, overwrite=overwrite)
+
+
+def persist_or_reuse_audio_artifact(
+    output_path: Path,
+    generated_payload: dict[str, Any],
+    *,
+    source_audio_sha256: str,
+    overwrite: bool,
+    expected_window_seconds: float | None = None,
+    expected_window_count: int | None = None,
+) -> dict[str, Any]:
+    """Persist a generated artifact or return a structurally compatible existing one."""
+    if output_path.exists() and not overwrite:
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+        stale = payload.get("source_audio_sha256") != source_audio_sha256
+        if expected_window_seconds is not None:
+            try:
+                stale = stale or float(payload.get("window_seconds")) != float(
+                    expected_window_seconds
+                )
+            except (TypeError, ValueError):
+                stale = True
+        if expected_window_count is not None:
+            windows = payload.get("windows")
+            stale = stale or not isinstance(windows, list) or len(windows) != expected_window_count
+        if "candidates" in generated_payload and not isinstance(payload.get("candidates"), list):
+            stale = True
+        if stale:
+            raise FileExistsError(
+                f"stale audio feature output exists: {output_path}; pass --overwrite"
+            )
+        return payload
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(generated_payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return generated_payload
 
 
 def process_session(
@@ -65,37 +104,45 @@ def process_session(
     if not skip_pose:
         if pose_model is None:
             raise ValueError("provide --pose-model or explicitly use --skip-pose")
-        pose_result = extract_pose_landmarks(
-            session_dir / "processed" / "frames",
-            session_id,
-            pose_model,
-            pose_path,
-            overwrite=overwrite,
-        )
+        if pose_path.exists() and not overwrite:
+            pose_result = load_pose_landmarks(
+                session_dir / "processed" / "frames",
+                session_id,
+                pose_model,
+                pose_path,
+            )
+        else:
+            pose_result = extract_pose_landmarks(
+                session_dir / "processed" / "frames",
+                session_id,
+                pose_model,
+                pose_path,
+                overwrite=overwrite,
+            )
     audio_feature_payload, vocalization_payload = extract_audio_modalities(
         session_dir / "processed" / "audio" / f"{session_id}_16khz_mono.wav",
         window_seconds=window_seconds,
+        expected_complete_windows=len(window_index["windows"]),
     )
     audio_feature_path = session_dir / "processed" / "features" / "acoustic_features.json"
     vocalization_path = session_dir / "processed" / "features" / "vocalization_candidates.json"
-    for output_path, payload in (
-        (audio_feature_path, audio_feature_payload),
-        (vocalization_path, vocalization_payload),
-    ):
-        if output_path.exists() and not overwrite:
-            existing = json.loads(output_path.read_text(encoding="utf-8"))
-            if existing.get("source_audio_sha256") != sha256_audio_file(
-                session_dir / "processed" / "audio" / f"{session_id}_16khz_mono.wav"
-            ) or (
-                output_path == audio_feature_path
-                and float(existing.get("window_seconds", -1)) != float(window_seconds)
-            ):
-                raise FileExistsError(
-                    f"stale audio feature output exists: {output_path}; pass --overwrite"
-                )
-        else:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    source_audio_sha256 = sha256_audio_file(
+        session_dir / "processed" / "audio" / f"{session_id}_16khz_mono.wav"
+    )
+    audio_feature_payload = persist_or_reuse_audio_artifact(
+        audio_feature_path,
+        audio_feature_payload,
+        source_audio_sha256=source_audio_sha256,
+        overwrite=overwrite,
+        expected_window_seconds=window_seconds,
+        expected_window_count=len(window_index["windows"]),
+    )
+    vocalization_payload = persist_or_reuse_audio_artifact(
+        vocalization_path,
+        vocalization_payload,
+        source_audio_sha256=source_audio_sha256,
+        overwrite=overwrite,
+    )
 
     movement_path = session_dir / "processed" / "features" / "movement_interaction.json"
     movement_status = "skipped_pose_not_available"
@@ -182,9 +229,19 @@ def process_session(
                     session_dir / "processed" / "windows" / "windows.json"
                 ),
             },
+            "pose_landmarks": (
+                {
+                    "path": str(pose_path.relative_to(session_dir)),
+                    "sha256": sha256_feature_file(pose_path),
+                    "training_authorized": False,
+                }
+                if pose_result is not None
+                else None
+            ),
             "acoustic_features": {
                 "path": str(audio_feature_path.relative_to(session_dir)),
                 "sha256": sha256_feature_file(audio_feature_path),
+                "training_authorized": False,
             },
             "vocalization_candidates": {
                 "path": str(vocalization_path.relative_to(session_dir)),
@@ -202,8 +259,14 @@ def process_session(
             ),
         },
         "multimodal_manifest": str(multimodal_manifest_path.relative_to(session_dir)),
+        "multimodal_manifest_sha256": sha256_feature_file(multimodal_manifest_path),
     }
     summary_path = session_dir / "processed" / "segments" / "media_pipeline_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    artifact_issues = validate_multimodal_artifacts(session_dir)
+    if artifact_issues:
+        raise ValueError("multimodal_artifact_validation_failed:" + ";".join(artifact_issues))
+    summary["artifact_validation"] = "passed"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
 

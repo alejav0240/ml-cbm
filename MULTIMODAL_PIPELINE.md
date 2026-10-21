@@ -26,6 +26,23 @@ out of scope. Existing derived outputs are preserved unless `--overwrite` is pas
 `processed/segments/multimodal_manifest.json` aligns pose frames, acoustic windows,
 vocalization candidates, and movement windows to each synchronized segment.
 `media_pipeline_summary.json` records paths and SHA-256 hashes for derived artifacts.
+The repository-level `multimodal_features.json` contract records which artifacts are
+dataset-eligible derived signals and which remain provisional. Validate a completed
+session before downstream use:
+
+```bash
+python ml/validate_multimodal_artifacts.py dataset/dataset/sessions/S001
+```
+
+## S001 execution evidence
+
+The integrated run reused normalized media and synchronized segments, then
+processed 1441 pose frames (1428 with detections), generated 288 acoustic windows
+and 288 movement/proximity windows, and emitted 315 provisional periodic-sound
+candidates. The multimodal manifest links all 288 complete windows to their
+acoustic and movement rows; candidate intervals may overlap multiple segments.
+All derived modalities report `training_authorized=false`. These counts verify
+execution and alignment, not detection accuracy or clinical validity.
 
 ## Safety boundary
 

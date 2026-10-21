@@ -141,6 +141,7 @@ class MediaPipelineTests(unittest.TestCase):
                 ) as extract_audio,
                 patch.object(media_pipeline, "sha256_audio_file", return_value="audio-hash"),
                 patch.object(media_pipeline, "sha256_feature_file", return_value="artifact-hash"),
+                patch.object(media_pipeline, "validate_multimodal_artifacts", return_value=[]),
                 patch.object(media_pipeline, "synchronize_pose_with_segments", return_value={}),
             ):
                 summary = media_pipeline.process_session(
@@ -153,7 +154,11 @@ class MediaPipelineTests(unittest.TestCase):
                     overwrite=True,
                 )
 
-            extract_audio.assert_called_once_with(audio_path, window_seconds=5.0)
+            extract_audio.assert_called_once_with(
+                audio_path,
+                window_seconds=5.0,
+                expected_complete_windows=0,
+            )
             load_window_index.assert_called_once_with(
                 session_dir,
                 overwrite=True,
