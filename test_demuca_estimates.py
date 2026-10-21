@@ -39,6 +39,14 @@ class DemucaEstimateTests(unittest.TestCase):
             write_demuca_estimates(session, output)
             original_hash = hashlib.sha256(output.read_bytes()).hexdigest()
 
+            pose = session / "processed" / "features" / "pose_landmarks.json"
+            pose.parent.mkdir(parents=True, exist_ok=True)
+            pose.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(FileExistsError, "stale DEMUCA estimate output"):
+                write_demuca_estimates(session, output, overwrite=False)
+            self.assertEqual(hashlib.sha256(output.read_bytes()).hexdigest(), original_hash)
+            pose.unlink()
+
             evaluation["evaluations"][0]["responses"][0]["score"] = 1
             source.write_text(json.dumps(evaluation), encoding="utf-8")
             with self.assertRaisesRegex(FileExistsError, "stale DEMUCA estimate output"):

@@ -30,6 +30,23 @@ def _finite_number(value: Any) -> bool:
     )
 
 
+def _input_fingerprint(
+    source_sha256: str,
+    duration_seconds: float,
+    available_modalities: set[str],
+) -> str:
+    value = json.dumps(
+        {
+            "source_evaluation_sha256": source_sha256,
+            "duration_seconds": float(duration_seconds),
+            "available_modalities": sorted(available_modalities),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(value).hexdigest()
+
+
 def build_demuca_estimates(
     payload: dict[str, Any],
     *,
@@ -133,6 +150,9 @@ def build_demuca_estimates(
         "review_status": evaluation.get("review_status"),
         "source_ground_truth": evaluation.get("coherence_review", {}).get("ground_truth") is True,
         "source_evaluation_sha256": source_sha256,
+        "input_fingerprint_sha256": _input_fingerprint(
+            source_sha256, duration_seconds, available_modalities
+        ),
         "confidence_kind": "bounded_observational_support_not_probability",
         "confidence_cap_percent": UNREVIEWED_CONFIDENCE_CAP_PERCENT,
         "calibration_status": "not_calibrated",
@@ -168,6 +188,9 @@ def write_demuca_estimates(
         if path.is_file()
     }
     source_sha256 = sha256_file(source_path)
+    expected_fingerprint = _input_fingerprint(
+        source_sha256, duration, available_modalities
+    )
     if output_path.exists() and not overwrite:
         try:
             existing = json.loads(output_path.read_text(encoding="utf-8"))
@@ -179,6 +202,7 @@ def write_demuca_estimates(
             not isinstance(existing, dict)
             or existing.get("session_id") != session_dir.name
             or existing.get("source_evaluation_sha256") != source_sha256
+            or existing.get("input_fingerprint_sha256") != expected_fingerprint
             or existing.get("calibration_status") != "not_calibrated"
             or existing.get("ground_truth") is not False
             or existing.get("training_authorized") is not False
