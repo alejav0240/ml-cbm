@@ -21,6 +21,13 @@
       "path": "processed/features/acoustic_features.json",
       "dataset_eligible": true,
       "semantic_status": "derived_signal"
+    },
+    "demuca_estimates": {
+      "path": "processed/features/demuca_estimates.json",
+      "dataset_eligible": false,
+      "semantic_status": "provisional_non_clinical_estimate",
+      "confidence_kind": "bounded_observational_support_not_probability",
+      "calibration_status": "not_calibrated"
     }
   },
   "training_authorized": false,

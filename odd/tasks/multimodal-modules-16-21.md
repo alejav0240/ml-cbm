@@ -18,6 +18,8 @@ S6. "21\tImplementación del módulo de características acústicas"
 Acceptance: acoustic descriptors are integrated per stable window with deterministic handling for empty, mono/stereo, and tail audio.
 S7. Existing canonical human-review and `AI_DRAFT` authorization boundaries must remain unchanged.
 S8. Update manifests, auditing, dataset contracts, task configuration, and documentation for every new integrated artifact and feature.
+S9. "en data set como respuesdel pipeline deberi de devilver el demunca anquesea el porcesate de certeza de cada valos"
+Acceptance: emit one provisional DEMUCA estimate per recorded subscale with its score, maximum, bounded evidence-support percentage, evidence provenance, and explicit non-calibrated/non-clinical status; never present it as ground truth or training authorization.
 
 ## Tasks
 
@@ -29,6 +31,7 @@ S8. Update manifests, auditing, dataset contracts, task configuration, and docum
 - T6 — S2, S6 — inline: reject non-finite window durations and persist generated audio artifacts atomically; status: complete; commit: `5334df3`; evidence: 8 focused tests and 86 full-suite tests pass.
 - T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; commit: `f9c80ce`; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
 - T8 — S3-S4 — inline: execute the official MediaPipe Pose Landmarker on S001 and aggregate real detections through the movement module; status: complete; evidence: 1,441/1,441 frames processed, detections in 1,410 frames, 1,635 pose instances, and 288 movement windows; outputs kept temporary and `training_authorized=false`.
+- T9 — S9 — inline: generate and validate provisional per-subscale DEMUCA estimates as a pipeline artifact; status: implemented; evidence: observed RED import failure, then 3 focused tests pass and S001 emits 14 bounded estimates with artifact validation passing.
 
 ## Log
 
@@ -49,3 +52,5 @@ L14. Verification for `5334df3`: 8 focused tests and 86 full-suite tests pass; n
 L15. Final local closure: `requirements-audio.txt` declares NumPy, SciPy, and SoundFile without absorbing unrelated edits in `requirements.txt`; the pipeline summary no longer declares the pose record twice; S001's existing manifest hash was reconciled atomically and its artifact validator now returns `valid=true`, while training remains unauthorized.
 L16. Real pose inference initially lacked a MediaPipe `.task` asset; the user explicitly authorized downloading the official model to resolve that execution boundary.
 L17. After explicit download authorization, the official full float16 Pose Landmarker was stored under ignored `ml/artifacts/models/` with SHA-256 `4eaa5eb7a98365221087693fcc286334cf0858e2eb6e15b506aa4a7ecdcec4ad`. A Python 3.12 MediaPipe run processed all 1,441 S001 frames without skips, detected poses in 1,410 frames (1,635 instances), and produced 288 provisional movement windows. This proves executable integration, not clinical correctness or label validity.
+L18. User authorization verbatim: "si implementa". The accepted shape is a provisional `demuca_estimates.json` with score and confidence per subscale, explicitly separated from clinical evaluation.
+L19. DEMUCA output uses the recorded score and computes a deterministic observational-support index from valid cited intervals and available audio/visual/interaction modalities. It is capped at 49%, explicitly not calibrated, never ground truth, and never training-authorized. S001 produces 14 estimates; current values are 33.33% for single-modality support and 49% where support spans at least two modalities.

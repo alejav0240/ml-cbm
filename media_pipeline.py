@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from create_window_index import write_window_index
+from demuca_estimates import write_demuca_estimates
 from media import (
     run_existing_extraction,
     segment_and_synchronize,
@@ -196,6 +197,13 @@ def process_session(
                 encoding="utf-8",
             )
             movement_status = "executed"
+    demuca_estimates_path = session_dir / "processed" / "features" / "demuca_estimates.json"
+    demuca_source_path = session_dir / "annotations" / "demuca" / "evaluations.json"
+    demuca_estimates = (
+        write_demuca_estimates(session_dir, demuca_estimates_path)
+        if demuca_source_path.is_file()
+        else None
+    )
     multimodal_manifest = synchronize_pose_with_segments(
         segments,
         pose_result,
@@ -240,6 +248,10 @@ def process_session(
         "movement_interaction_path": (
             str(movement_path.relative_to(session_dir)) if movement_status != "skipped_pose_not_available" else None
         ),
+        "demuca_estimates": len(demuca_estimates["estimates"]) if demuca_estimates else 0,
+        "demuca_estimates_path": (
+            str(demuca_estimates_path.relative_to(session_dir)) if demuca_estimates else None
+        ),
         "derived_artifacts": {
             "stable_window_index": {
                 "path": "processed/windows/windows.json",
@@ -273,6 +285,16 @@ def process_session(
                     "training_authorized": False,
                 }
                 if movement_payload is not None
+                else None
+            ),
+            "demuca_estimates": (
+                {
+                    "path": str(demuca_estimates_path.relative_to(session_dir)),
+                    "sha256": sha256_feature_file(demuca_estimates_path),
+                    "training_authorized": False,
+                    "calibration_status": "not_calibrated",
+                }
+                if demuca_estimates is not None
                 else None
             ),
             "multimodal_manifest": {

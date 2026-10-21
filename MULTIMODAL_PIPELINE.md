@@ -32,6 +32,7 @@ out of scope. Existing derived outputs are preserved unless `--overwrite` is pas
 | 19 | `processed/features/movement_interaction.json` | Anonymous motion and proximity candidates per stable window. Proximity is not confirmed interaction. |
 | 20 | `processed/features/vocalization_candidates.json` | Periodic voiced-sound candidates without speaker attribution; `training_authorized=false`. |
 | 21 | `processed/features/acoustic_features.json` | RMS, ZCR, spectral descriptors, MFCCs, pitch median, and voiced-frame fraction on the shared window grid. |
+| Provisional DEMUCA output | `processed/features/demuca_estimates.json` | Recorded score plus bounded observational-support percentage for every subscale; not a calibrated probability, clinical result, or training target. |
 
 `processed/segments/multimodal_manifest.json` aligns pose frames, acoustic windows,
 vocalization candidates, and movement windows to each synchronized segment.
@@ -43,6 +44,14 @@ session before downstream use:
 ```bash
 python ml/validate_multimodal_artifacts.py dataset/dataset/sessions/S001
 ```
+
+When `annotations/demuca/evaluations.json` exists, the pipeline also emits one
+provisional record per subscale. `predicted_score` preserves the recorded score;
+`confidence_percent` measures only how much cited evidence is available across
+the audio, visual, and interaction artifacts. It is capped at 49% while the
+evaluation lacks clinical approval, and the artifact always declares
+`calibration_status=not_calibrated`, `ground_truth=false`, and
+`training_authorized=false`.
 
 ## S001 execution evidence
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -42,10 +43,11 @@ def validate_multimodal_artifacts(session_dir: Path) -> list[str]:
         "acoustic_features",
         "vocalization_candidates",
         "movement_interaction",
+        "demuca_estimates",
         "multimodal_manifest",
     ):
         record = artifacts.get(name)
-        if record is None and name in {"pose_landmarks", "movement_interaction"}:
+        if record is None and name in {"pose_landmarks", "movement_interaction", "demuca_estimates"}:
             continue
         if not isinstance(record, dict):
             issues.append(f"artifact_record_missing:{name}")
@@ -84,6 +86,27 @@ def validate_multimodal_artifacts(session_dir: Path) -> list[str]:
         payload = loaded.get(name)
         if payload is not None and payload.get("training_authorized") is not False:
             issues.append(f"provisional_training_flag_invalid:{name}")
+    demuca = loaded.get("demuca_estimates")
+    if demuca is not None:
+        if demuca.get("training_authorized") is not False:
+            issues.append("provisional_training_flag_invalid:demuca_estimates")
+        if demuca.get("ground_truth") is not False:
+            issues.append("demuca_ground_truth_flag_invalid")
+        if demuca.get("calibration_status") != "not_calibrated":
+            issues.append("demuca_calibration_status_invalid")
+        estimates = demuca.get("estimates")
+        if not isinstance(estimates, list) or not estimates:
+            issues.append("demuca_estimates_missing_or_empty")
+        else:
+            for index, estimate in enumerate(estimates):
+                confidence = estimate.get("confidence_percent") if isinstance(estimate, dict) else None
+                if (
+                    isinstance(confidence, bool)
+                    or not isinstance(confidence, (int, float))
+                    or not math.isfinite(float(confidence))
+                    or not 0 <= float(confidence) <= 49
+                ):
+                    issues.append(f"demuca_confidence_invalid:{index}")
     pose = loaded.get("pose_landmarks")
     if pose is not None and pose.get("session_id") != session_dir.name:
         issues.append("pose_session_id_mismatch")

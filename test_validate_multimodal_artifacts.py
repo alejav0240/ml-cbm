@@ -23,6 +23,13 @@ class MultimodalArtifactValidationTests(unittest.TestCase):
                 "acoustic_features": (features / "acoustic_features.json", {"windows": [{"timestamp_seconds": 2.5}]}),
                 "vocalization_candidates": (features / "vocalization_candidates.json", {"candidates": [], "training_authorized": False}),
                 "movement_interaction": (features / "movement_interaction.json", {"windows": [{"window_id": "S001_W0000"}], "training_authorized": False}),
+                "demuca_estimates": (features / "demuca_estimates.json", {
+                    "session_id": "S001",
+                    "estimates": [{"subscale": "Atención", "confidence_percent": 25.0}],
+                    "calibration_status": "not_calibrated",
+                    "ground_truth": False,
+                    "training_authorized": False,
+                }),
                 "multimodal_manifest": (segments / "multimodal_manifest.json", {"session_id": "S001", "segments": []}),
             }
             records = {}
