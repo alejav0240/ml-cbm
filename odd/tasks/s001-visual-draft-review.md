@@ -12,7 +12,7 @@ S4. Validate counts, source hashes, schema, and that the canonical `review_frame
 ## Tasks
 
 - T1 — S1-S3 — delegated read-only visual review in three disjoint 192-sample ranges; status: complete; evidence: 576 unique ordered JSONL drafts.
-- T2 — S2-S4 — inline merge, validation, and report; status: complete; evidence: canonical validator valid, 0/576 human-reviewed, canonical SHA-256 unchanged; commit: pending for this non-sensitive task record only.
+- T2 — S2-S4 — inline merge, validation, and report; status: complete; evidence: canonical validator valid, 0/576 human-reviewed, canonical SHA-256 unchanged; commit: `7c545da`.
 
 ## Log
 
@@ -26,3 +26,4 @@ L7. Merged artifact: `dataset/dataset/sessions/S001/processed/vision/review/ai_d
 L8. Draft outcome: 246 `prediction_visually_plausible`, 330 `needs_human_review`; confidence counts are 124 high, 278 medium, and 174 low. No sample was promoted to human ground truth.
 L9. Canonical validation remains intentionally incomplete: valid=true, reviewed_rows=0, pending_rows=576, metrics_ready=false. Canonical CSV SHA-256 remained `619f509032ebb7bdb8238c38a393b32c8fa8b915e785bbf697e3f96546e4ec7a`.
 L10. Notable manual-review priorities: opening frame merges two people in one box; frames VR0285 and VR0374 contain missed/clipped people; musical/therapy equipment frequently receives questionable COCO labels; partly occluded children need manual confirmation.
+L11. Work-unit record committed as `7c545da` (`docs(ml): record S001 visual draft review`); dataset drafts remain intentionally uncommitted and ignored.
