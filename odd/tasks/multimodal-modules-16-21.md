@@ -20,6 +20,8 @@ S7. Existing canonical human-review and `AI_DRAFT` authorization boundaries must
 S8. Update manifests, auditing, dataset contracts, task configuration, and documentation for every new integrated artifact and feature.
 S9. "en data set como respuesdel pipeline deberi de devilver el demunca anquesea el porcesate de certeza de cada valos"
 Acceptance: emit one provisional DEMUCA estimate per recorded subscale with its score, maximum, bounded evidence-support percentage, evidence provenance, and explicit non-calibrated/non-clinical status; never present it as ground truth or training authorization.
+S10. "continua con pipeline hazta el una fase donde pueda mandar un video y me devuelva unas respuestas"
+Acceptance: provide one public command that accepts a local video, creates a safe self-contained session, runs the multimodal pipeline, writes a machine-readable response, and explicitly reports DEMUCA as unavailable when neither a recorded evaluation nor a calibrated model exists.
 
 ## Tasks
 
@@ -32,6 +34,7 @@ Acceptance: emit one provisional DEMUCA estimate per recorded subscale with its 
 - T7 — S1-S8 — inline: make acoustic runtime dependencies reproducible, remove the duplicate pose summary entry, and reconcile S001 artifact metadata; status: complete; commit: `f9c80ce`; evidence: 86 full-suite tests pass and S001 artifact validation returns no issues.
 - T8 — S3-S4 — inline: execute the official MediaPipe Pose Landmarker on S001 and aggregate real detections through the movement module; status: complete; evidence: 1,441/1,441 frames processed, detections in 1,410 frames, 1,635 pose instances, and 288 movement windows; outputs kept temporary and `training_authorized=false`.
 - T9 — S9 — inline: generate and validate provisional per-subscale DEMUCA estimates as a pipeline artifact; status: complete; commit: `ff70b48`; evidence: observed RED import failure, then 3 focused tests and 88 full-suite tests pass; S001 emits 14 bounded estimates with artifact validation passing.
+- T10 — S10 — inline: add a video-to-response entrypoint with safe session staging and explicit non-clinical response semantics; status: complete; evidence: observed RED `ModuleNotFoundError: analyze_video`, then 6 focused tests and 91 full-suite tests pass.
 
 ## Log
 
@@ -56,3 +59,5 @@ L18. User authorization verbatim: "si implementa". The accepted shape is a provi
 L19. DEMUCA output uses the recorded score and computes a deterministic observational-support index from valid cited intervals and available audio/visual/interaction modalities. It is capped at 49%, explicitly not calibrated, never ground truth, and never training-authorized. S001 produces 14 estimates; current values are 33.33% for single-modality support and 49% where support spans at least two modalities.
 L20. Independent verification found that the first implementation rewrote an existing DEMUCA estimate despite `overwrite=false`. A public-writer regression now proves that changed source evaluations fail as stale without changing the existing output hash; explicit `--overwrite` is required to regenerate.
 L21. Native reliability review found cached estimates did not include session duration or available modalities in their reuse identity. The artifact now records a canonical input fingerprint over evaluation hash, duration, and sorted modalities; any dependency change fails stale unless overwrite is explicit.
+L22. User requirement verbatim: "continua con pipeline hazta el una fase donde pueda mandar un video y me devuelva unas respuestas". The entrypoint will return observable multimodal results from video alone and will not synthesize DEMUCA scores without a recorded evaluation or calibrated model.
+L23. `analyze_video.py` stages a new session, rejects collisions without modifying existing data, invokes the canonical pipeline, prints a JSON response, and atomically persists `processed/analysis_response.json`. Focused tests cover successful staging and collision preservation.

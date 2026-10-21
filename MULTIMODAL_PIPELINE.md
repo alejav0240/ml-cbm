@@ -22,6 +22,25 @@ python ml/media_pipeline.py S001 \
 Use `--skip-pose` only when pose, movement, and proximity features are intentionally
 out of scope. Existing derived outputs are preserved unless `--overwrite` is passed.
 
+## Analyze one video
+
+From the project root, submit a local video and choose a new session ID:
+
+```bash
+python ml/analyze_video.py /path/to/input.mp4 --session-id UPLOAD-001 --project-root .
+```
+
+The command stages an immutable copy under
+`dataset/dataset/sessions/UPLOAD-001/raw/`, runs the pipeline, prints JSON, and
+writes the same response to
+`dataset/dataset/sessions/UPLOAD-001/processed/analysis_response.json`.
+It uses the repository pose model when available; pass `--skip-pose` to run only
+the audio-capable stages, or `--pose-model /path/to/model.task` explicitly.
+
+For a video-only session, the response reports observable artifact summaries.
+DEMUCA is returned as `status: "not_available"` unless the session contains a
+recorded evaluation; the command does not fabricate clinical scores or confidence.
+
 ## Produced artifacts
 
 | Stage | Artifact | Contract |
