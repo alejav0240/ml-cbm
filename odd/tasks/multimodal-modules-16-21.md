@@ -1,6 +1,6 @@
 # Multimodal modules 16–21
 
-Objective: complete and integrate the required audio/video, synchronization, pose, movement/interactions, vocalization, and acoustic feature modules. Branch: `feat/s001-ai-draft-review`. Delivery: `feature-branch-chain`; test runner: `../dataset/.venv/bin/python -m unittest discover -p 'test_*.py'`.
+Objective: complete and integrate the required audio/video, synchronization, pose, movement/interactions, vocalization, and acoustic feature modules. Branch: `feat/multimodal-orchestration`. Delivery: `feature-branch-chain`; test runner: `../dataset/.venv/bin/python -m unittest discover -p 'test_*.py'`.
 
 ## Specs
 
