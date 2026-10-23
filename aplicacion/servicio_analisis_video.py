@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, redirect_stdout
-import hashlib
 import json
 import os
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Callable
+
+from infraestructura.persistencia_json import RepositorioArtefactos
 
 
 class ServicioAnalisisVideo:
@@ -49,15 +49,16 @@ class ServicioAnalisisVideo:
         staged_video = session_dir / "raw" / f"input{suffix}"
         manifest_path = session_dir / "session_manifest.json"
         response_path = session_dir / "processed" / "analysis_response.json"
-        source_sha256 = self._sha256(video_path)
+        repositorio = RepositorioArtefactos()
+        source_sha256 = repositorio.huella(video_path)
         if session_dir.exists():
             if response_path.is_file():
-                return json.loads(response_path.read_text(encoding="utf-8"))
+                return repositorio.leer_json(response_path)
             if not staged_video.is_file() or not manifest_path.is_file():
                 raise FileExistsError(f"session already exists: {session_dir}")
-            if self._sha256(staged_video) != source_sha256:
+            if repositorio.huella(staged_video) != source_sha256:
                 raise FileExistsError(f"session already exists with different input: {session_dir}")
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = repositorio.leer_json(manifest_path)
             duration_seconds = float(manifest["duration_seconds"])
         else:
             duration_seconds = self._probe_duration(video_path)
@@ -91,8 +92,8 @@ class ServicioAnalisisVideo:
                                 "frames_extracted": False, "features_extracted": False},
                 "annotation": {"visual": False, "audio": False, "interaction": False, "demuca": False},
             }
-            self._write_json_atomic(session_dir / "metadata" / "session.json", metadata)
-            self._write_json_atomic(manifest_path, manifest)
+            repositorio.escribir_json_atomico(session_dir / "metadata" / "session.json", metadata)
+            repositorio.escribir_json_atomico(manifest_path, manifest)
 
         with self._pipeline_progress_to_stderr():
             summary = self._process_session(
@@ -102,7 +103,7 @@ class ServicioAnalisisVideo:
 
         demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
         if demuca_path.is_file():
-            demuca: dict[str, Any] = json.loads(demuca_path.read_text(encoding="utf-8"))
+            demuca: dict[str, Any] = repositorio.leer_json(demuca_path)
             demuca["status"] = "provisional"
         else:
             demuca = {"status": "not_available",
@@ -122,31 +123,8 @@ class ServicioAnalisisVideo:
             "demuca": demuca,
             "session_relative_path": f"dataset/dataset/sessions/{session_id}",
         }
-        self._write_json_atomic(response_path, response)
+        repositorio.escribir_json_atomico(response_path, response)
         return response
-
-    @staticmethod
-    def _sha256(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as file:
-            for block in iter(lambda: file.read(1024 * 1024), b""):
-                digest.update(block)
-        return digest.hexdigest()
-
-    @staticmethod
-    def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-        temporary_path = Path(temporary_name)
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-                file.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temporary_path, path)
-        except BaseException:
-            temporary_path.unlink(missing_ok=True)
-            raise
 
     @staticmethod
     @contextmanager
