@@ -28,8 +28,8 @@ Aceptación: `POST /api/multimodal/analizar-video/` acepta multipart `video` y d
 - T3 — S1-S3 — inline: aislar persistencia atómica, hash y reutilización de artefactos; estado: completo; commit: `ac9597e`; evidencia: 9 pruebas enfocadas pasan.
 - T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: completo; commit: `b407ebe`; evidencia: pipeline y validador enfocados pasan.
 - T5 — S3 — inline: documentar y probar compatibilidad con la ruta legacy de ventanas; estado: completo; commit: `37e0b20`; evidencia: prueba de separación de rutas legacy/nueva.
-- T6 — S5 — inline: aislar el adaptador FFmpeg/FFprobe; estado: completo; commit: pendiente; evidencia: prueba del adaptador y pipeline enfocado.
-- T7 — S6 — inline: publicar endpoint HTTP del análisis; estado: completo; commit: pendiente; evidencia: 2 pruebas Django y `manage.py check` pasan.
+- T6 — S5 — inline: aislar el adaptador FFmpeg/FFprobe; estado: completo; commit: af6e954; evidencia: prueba del adaptador y pipeline enfocado.
+- T7 — S6 — inline: publicar endpoint HTTP del análisis; estado: completo; commit: c3092f5; evidencia: 2 pruebas Django y `manage.py check` pasan.
 
 ## Registro
 
