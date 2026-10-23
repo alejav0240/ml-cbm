@@ -33,3 +33,5 @@ python -m mlops.cli promote \
 ```
 
 El registro bloquea candidatos cuyo `pipeline_status.json` no esté completado o no tenga `training_authorized=true`. Cada artefacto conserva su hash SHA-256 y la promoción archiva la versión productiva anterior.
+
+Además del modelo y las métricas, el registro captura las huellas de `event-windows.csv` y `patient-split.json` cuando están disponibles, para detectar cambios de datos entre entrenamientos.
