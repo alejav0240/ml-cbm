@@ -26,7 +26,10 @@ from movement_interaction import (
 from pose import extract_pose_landmarks, load_pose_landmarks
 from pipeline_graph import write_pipeline_graph
 from tracking import log_run
-from validate_multimodal_artifacts import validate_multimodal_artifacts
+from contratos.validacion_multimodal import validar_sesion_multimodal
+
+# Alias histórico: los consumidores y pruebas existentes siguen parcheando este nombre.
+validate_multimodal_artifacts = validar_sesion_multimodal
 from window_index import validate_window_index
 
 

@@ -22,7 +22,7 @@ Aceptación: ningún resultado de video se presenta como diagnóstico, ground tr
 - T1 — S1-S4 — inline: documentar capas, dependencias y contratos; estado: completo; commit: pendiente; evidencia: `ARQUITECTURA_MULTIMODAL.md` creado y leído.
 - T2 — S1-S2 — inline: extraer servicio de aplicación para analizar una sesión manteniendo el CLI; estado: completo; commit: pendiente; evidencia: 4 pruebas de entrada pasan.
 - T3 — S1-S3 — inline: aislar persistencia atómica, hash y reutilización de artefactos; estado: completo; commit: pendiente; evidencia: 9 pruebas enfocadas pasan.
-- T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: pendiente; commit: pendiente.
+- T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: completo; commit: pendiente; evidencia: pipeline y validador enfocados pasan.
 - T5 — S3 — inline: documentar y probar compatibilidad con la ruta legacy de ventanas; estado: pendiente; commit: pendiente.
 
 ## Registro
