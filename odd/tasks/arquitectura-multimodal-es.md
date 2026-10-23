@@ -20,7 +20,7 @@ Aceptación: ningún resultado de video se presenta como diagnóstico, ground tr
 ## Tareas
 
 - T1 — S1-S4 — inline: documentar capas, dependencias y contratos; estado: completo; commit: pendiente; evidencia: `ARQUITECTURA_MULTIMODAL.md` creado y leído.
-- T2 — S1-S2 — inline: extraer servicio de aplicación para analizar una sesión manteniendo el CLI; estado: pendiente; commit: pendiente.
+- T2 — S1-S2 — inline: extraer servicio de aplicación para analizar una sesión manteniendo el CLI; estado: completo; commit: pendiente; evidencia: 4 pruebas de entrada pasan.
 - T3 — S1-S3 — inline: aislar persistencia atómica, hash y reutilización de artefactos; estado: pendiente; commit: pendiente.
 - T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: pendiente; commit: pendiente.
 - T5 — S3 — inline: documentar y probar compatibilidad con la ruta legacy de ventanas; estado: pendiente; commit: pendiente.
