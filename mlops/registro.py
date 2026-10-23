@@ -80,15 +80,20 @@ def registrar_candidato(
         raise ErrorRegistroModelo(f"model_version_exists:{version}")
 
     metrics = _leer_json(metrics_path)
+    source_artifacts = {
+        "model": {"path": str(model_path), "sha256": _sha256(model_path)},
+        "metrics": {"path": str(metrics_path), "sha256": _sha256(metrics_path)},
+    }
+    for name in ("event-windows.csv", "patient-split.json"):
+        path = artefactos_dir / name
+        if path.is_file():
+            source_artifacts[name.rsplit(".", 1)[0]] = {"path": str(path), "sha256": _sha256(path)}
     record = {
         "model_name": model_name,
         "version": version,
         "status": "candidate",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "source_artifacts": {
-            "model": {"path": str(model_path), "sha256": _sha256(model_path)},
-            "metrics": {"path": str(metrics_path), "sha256": _sha256(metrics_path)},
-        },
+        "source_artifacts": source_artifacts,
         "metrics": _metricas_candidato(metrics),
     }
     models.append(record)
