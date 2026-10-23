@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager, redirect_stdout
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -14,6 +15,18 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+
+def _ensure_project_runtime() -> None:
+    """Re-execute with the project virtualenv when the caller lacks runtime deps."""
+    if importlib.util.find_spec("numpy") is not None:
+        return
+    project_python = Path(__file__).resolve().parents[1] / "dataset" / ".venv" / "bin" / "python"
+    if project_python.is_file() and Path(sys.executable) != project_python:
+        os.execv(str(project_python), [str(project_python), *sys.argv])
+
+
+_ensure_project_runtime()
 
 from media import probe_duration
 from media_pipeline import process_session
@@ -56,7 +69,11 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def analyze_video(
@@ -77,21 +94,31 @@ def analyze_video(
     if not SESSION_ID_PATTERN.fullmatch(session_id):
         raise ValueError("session_id must use 1-64 letters, numbers, underscores, or hyphens")
     session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
-    if session_dir.exists():
-        raise FileExistsError(f"session already exists: {session_dir}")
-
     default_model = project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task"
     selected_model = pose_model.resolve() if pose_model is not None else default_model
-    should_skip_pose = skip_pose is True or (pose_model is None and not default_model.is_file())
+    # Pose inference is opt-in for long uploads; pass --pose-model explicitly.
+    should_skip_pose = skip_pose is True or pose_model is None
     if not should_skip_pose and not selected_model.is_file():
         raise FileNotFoundError(f"pose model not found: {selected_model}")
 
-    duration_seconds = probe_duration(video_path)
     suffix = video_path.suffix.lower() if video_path.suffix else ".mp4"
     staged_video = session_dir / "raw" / f"input{suffix}"
-    staged_video.parent.mkdir(parents=True)
-    shutil.copy2(video_path, staged_video)
-    source_sha256 = _sha256(staged_video)
+    manifest_path = session_dir / "session_manifest.json"
+    response_path = session_dir / "processed" / "analysis_response.json"
+    source_sha256 = _sha256(video_path)
+    if session_dir.exists():
+        if response_path.is_file():
+            return json.loads(response_path.read_text(encoding="utf-8"))
+        if not staged_video.is_file() or not manifest_path.is_file():
+            raise FileExistsError(f"session already exists: {session_dir}")
+        if _sha256(staged_video) != source_sha256:
+            raise FileExistsError(f"session already exists with different input: {session_dir}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        duration_seconds = float(manifest["duration_seconds"])
+    else:
+        duration_seconds = probe_duration(video_path)
+        staged_video.parent.mkdir(parents=True)
+        shutil.copy2(video_path, staged_video)
     metadata = {
         "session_id": session_id,
         "dataset_version": "1.0",
@@ -127,8 +154,9 @@ def analyze_video(
             "video_path": staged_video.relative_to(session_dir).as_posix(),
         }],
     }
-    _write_json_atomic(session_dir / "metadata" / "session.json", metadata)
-    _write_json_atomic(session_dir / "session_manifest.json", manifest)
+    if not manifest_path.is_file():
+        _write_json_atomic(session_dir / "metadata" / "session.json", metadata)
+        _write_json_atomic(manifest_path, manifest)
 
     with _pipeline_progress_to_stderr():
         summary = process_session(
@@ -174,7 +202,7 @@ def analyze_video(
         "session_relative_path": f"dataset/dataset/sessions/{session_id}",
     }
     _write_json_atomic(
-        session_dir / "processed" / "analysis_response.json", response
+        response_path, response
     )
     return response
 

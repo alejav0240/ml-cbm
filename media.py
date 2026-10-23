@@ -168,7 +168,7 @@ def normalize_manifest_fragments(
     manifest_path: Path | None = None,
     *,
     overwrite: bool = False,
-    tolerance_seconds: float = 0.05,
+    tolerance_seconds: float = 0.15,
 ) -> dict[str, Any]:
     """Normalize and concatenate manifest fragments without changing raw inputs."""
     manifest_path = manifest_path or session_dir / "session_manifest.json"

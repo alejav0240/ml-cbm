@@ -34,8 +34,8 @@ The command stages an immutable copy under
 `dataset/dataset/sessions/UPLOAD-001/raw/`, runs the pipeline, prints JSON, and
 writes the same response to
 `dataset/dataset/sessions/UPLOAD-001/processed/analysis_response.json`.
-It uses the repository pose model when available; pass `--skip-pose` to run only
-the audio-capable stages, or `--pose-model /path/to/model.task` explicitly.
+It runs the audio-capable stages by default; pose inference is opt-in with
+`--pose-model /path/to/model.task` (or explicitly `--skip-pose`).
 
 For a video-only session, the response reports observable artifact summaries.
 DEMUCA is returned as `status: "not_available"` unless the session contains a
