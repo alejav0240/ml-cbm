@@ -16,9 +16,9 @@ Aceptación: JSON atómico con versión, hashes, métricas, estado y artefactos.
 
 ## Tasks
 
-- T1 — S1-S3 — inline: crear registro local y funciones de hash/validación; estado: completo; commit: pendiente; evidencia: 4 pruebas de registro pasan.
-- T2 — S1-S2 — inline: añadir CLI de registro y promoción con gate de métricas; estado: completo; commit: pendiente; evidencia: MLOPS.md y suite enfocada.
-- T3 — S1-S3 — inline: añadir pruebas y documentación de operación; estado: completo; commit: pendiente; evidencia: MLOPS.md y suite enfocada.
+- T1 — S1-S3 — inline: crear registro local y funciones de hash/validación; estado: completo; commit: `bda7b94`; evidencia: 4 pruebas de registro pasan.
+- T2 — S1-S2 — inline: añadir CLI de registro y promoción con gate de métricas; estado: completo; commit: `bda7b94`; evidencia: MLOPS.md y suite enfocada.
+- T3 — S1-S3 — inline: añadir pruebas y documentación de operación; estado: completo; commit: `bda7b94`; evidencia: MLOPS.md y suite enfocada.
 
 ## Registro
 
