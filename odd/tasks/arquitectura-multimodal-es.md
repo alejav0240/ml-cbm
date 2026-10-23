@@ -19,13 +19,14 @@ Aceptación: ningún resultado de video se presenta como diagnóstico, ground tr
 
 ## Tareas
 
-- T1 — S1-S4 — inline: documentar capas, dependencias y contratos; estado: completo; commit: pendiente; evidencia: `ARQUITECTURA_MULTIMODAL.md` creado y leído.
-- T2 — S1-S2 — inline: extraer servicio de aplicación para analizar una sesión manteniendo el CLI; estado: completo; commit: pendiente; evidencia: 4 pruebas de entrada pasan.
-- T3 — S1-S3 — inline: aislar persistencia atómica, hash y reutilización de artefactos; estado: completo; commit: pendiente; evidencia: 9 pruebas enfocadas pasan.
-- T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: completo; commit: pendiente; evidencia: pipeline y validador enfocados pasan.
-- T5 — S3 — inline: documentar y probar compatibilidad con la ruta legacy de ventanas; estado: completo; commit: pendiente; evidencia: prueba de separación de rutas legacy/nueva.
+- T1 — S1-S4 — inline: documentar capas, dependencias y contratos; estado: completo; commit: `2a5f472`; evidencia: `ARQUITECTURA_MULTIMODAL.md` creado y leído.
+- T2 — S1-S2 — inline: extraer servicio de aplicación para analizar una sesión manteniendo el CLI; estado: completo; commit: `0d30f40`; evidencia: 4 pruebas de entrada pasan.
+- T3 — S1-S3 — inline: aislar persistencia atómica, hash y reutilización de artefactos; estado: completo; commit: `ac9597e`; evidencia: 9 pruebas enfocadas pasan.
+- T4 — S1-S4 — inline: separar contratos/validación como fachada compatible; estado: completo; commit: `b407ebe`; evidencia: pipeline y validador enfocados pasan.
+- T5 — S3 — inline: documentar y probar compatibilidad con la ruta legacy de ventanas; estado: completo; commit: `37e0b20`; evidencia: prueba de separación de rutas legacy/nueva.
 
 ## Registro
 
 L1. Usuario: "organiza todo bajo una arquitectura buena, en espanol".
 L2. El mapa actual confirma que `analyze_video.py` mezcla CLI, staging, orquestación y respuesta; `media_pipeline.py` mezcla orquestación, persistencia, validación y tracking. La migración será incremental y conservará los contratos persistidos.
+L3. La migración T1-T5 quedó implementada sin renombrar artefactos persistidos: el CLI delega a `aplicacion/servicio_analisis_video.py`, la persistencia vive en `infraestructura/persistencia_json.py`, y los contratos tienen fachadas en `contratos/`.
