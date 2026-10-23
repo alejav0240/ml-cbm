@@ -14,11 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from session_manifest import load_and_validate_session_manifest
+from infraestructura.medios import AdaptadorFFmpeg
+
+
+_ffmpeg = AdaptadorFFmpeg()
 
 
 def run_command(command: list[str]) -> str:
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
-    return result.stdout.strip()
+    return _ffmpeg.ejecutar(command)
 
 
 def run_existing_extraction(

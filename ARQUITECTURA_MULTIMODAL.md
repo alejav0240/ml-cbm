@@ -28,7 +28,7 @@ Orquestación de casos de uso
         |      validate_multimodal_artifacts.py
         |
         +--> Infraestructura
-               media.py / FFmpeg
+               media.py / `infraestructura.medios.AdaptadorFFmpeg`
                SoundFile / NumPy / SciPy
                MediaPipe
                persistencia JSON y SHA-256
@@ -76,6 +76,15 @@ seguridad. La validación es una barrera antes de permitir uso downstream.
 3. La infraestructura implementa adaptadores consumidos por la aplicación.
 4. Los contratos validan cualquier artefacto antes de su uso downstream.
 5. Los cambios de nombres, rutas, hashes o schema requieren migración explícita.
+
+## Integración HTTP
+
+El backend expone `POST /api/multimodal/analizar-video/` con un campo multipart
+`video` y un `session_id` opcional. El endpoint guarda la subida temporalmente,
+invoca el caso de uso público mediante el entorno ML configurado y devuelve la
+misma respuesta JSON del CLI. El proceso ML permanece fuera del dominio HTTP y
+se controla con `MULTIMODAL_PROJECT_ROOT`, `MULTIMODAL_PYTHON` y
+`MULTIMODAL_TIMEOUT_SECONDS`.
 
 ## Migración incremental
 
