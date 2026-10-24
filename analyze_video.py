@@ -10,7 +10,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 def _ensure_project_runtime() -> None:
@@ -30,6 +30,37 @@ from media_pipeline import process_session
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+class ProgressReporter:
+    """Renderiza fases en stderr sin contaminar el JSON de stdout."""
+
+    LABELS = {
+        "extraccion": "Extracción de audio y vídeo",
+        "segmentacion": "Segmentación y sincronización",
+        "pose": "Computer Vision / pose",
+        "audio": "Características acústicas y vocalizaciones",
+        "movimiento": "Movimiento e interacción",
+        "sincronizacion": "Sincronización multimodal",
+        "validacion": "Validación de artefactos",
+    }
+
+    def __init__(self, *, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self.index = 0
+        self.total = len(self.LABELS)
+
+    def __call__(self, phase: str, state: str) -> None:
+        if not self.enabled or phase not in self.LABELS:
+            return
+        if state == "start":
+            self.index += 1
+            print(f"[{self.index}/{self.total}] {self.LABELS[phase]} [  0%]", file=sys.stderr, flush=True)
+        else:
+            bar = "=" * 24
+            print(f"\r[{self.index}/{self.total}] {self.LABELS[phase]} [{bar}] 100% ✓", file=sys.stderr, flush=True)
+
+
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -42,12 +73,14 @@ def analyze_video(
     max_tail_trim_seconds: float = 0.2,
     pose_model: Path | None = None,
     skip_pose: bool | None = None,
+    progress_callback: Callable[[str, str], None] | None = None,
 ) -> dict[str, Any]:
     """Adaptador CLI para el caso de uso de aplicación."""
     return ServicioAnalisisVideo(probe_duration, process_session).ejecutar(
         video_path, session_id=session_id, project_root=project_root,
         window_seconds=window_seconds, max_tail_trim_seconds=max_tail_trim_seconds,
         pose_model=pose_model, skip_pose=skip_pose, session_id_pattern=SESSION_ID_PATTERN,
+        progress_callback=progress_callback,
     )
 
 
@@ -61,7 +94,9 @@ def main() -> int:
     pose = parser.add_mutually_exclusive_group()
     pose.add_argument("--pose-model", type=Path)
     pose.add_argument("--skip-pose", action="store_true")
+    parser.add_argument("--no-progress", action="store_true", help="No mostrar fases ni barras en stderr")
     args = parser.parse_args()
+    reporter = ProgressReporter(enabled=not args.no_progress)
     try:
         response = analyze_video(
             args.video,
@@ -71,6 +106,7 @@ def main() -> int:
             max_tail_trim_seconds=args.max_tail_trim_seconds,
             pose_model=args.pose_model,
             skip_pose=True if args.skip_pose else None,
+            progress_callback=reporter,
         )
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False))

@@ -110,9 +110,15 @@ def process_session(
     pose_model: Path | None,
     skip_pose: bool,
     overwrite: bool,
+    progress_callback: Any | None = None,
 ) -> dict[str, Any]:
     session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
+    if progress_callback:
+        progress_callback("extraccion", "start")
     extraction = run_existing_extraction(session_id, project_root, overwrite)
+    if progress_callback:
+        progress_callback("extraccion", "done")
+        progress_callback("segmentacion", "start")
     segments = segment_and_synchronize(
         session_dir,
         session_id,
@@ -121,6 +127,9 @@ def process_session(
         overwrite=overwrite,
     )
     window_index = load_or_create_window_index(session_dir, overwrite=overwrite)
+    if progress_callback:
+        progress_callback("segmentacion", "done")
+        progress_callback("pose", "start")
     pose_result = None
     pose_path = session_dir / "processed" / "features" / "pose_landmarks.json"
     if not skip_pose:
@@ -141,6 +150,9 @@ def process_session(
                 pose_path,
                 overwrite=overwrite,
             )
+    if progress_callback:
+        progress_callback("pose", "done")
+        progress_callback("audio", "start")
     audio_feature_payload, vocalization_payload = extract_audio_modalities(
         session_dir / "processed" / "audio" / f"{session_id}_16khz_mono.wav",
         window_seconds=window_seconds,
@@ -166,6 +178,9 @@ def process_session(
         overwrite=overwrite,
     )
 
+    if progress_callback:
+        progress_callback("audio", "done")
+        progress_callback("movimiento", "start")
     movement_path = session_dir / "processed" / "features" / "movement_interaction.json"
     movement_status = "skipped_pose_not_available"
     movement_payload = None
@@ -200,6 +215,9 @@ def process_session(
                 encoding="utf-8",
             )
             movement_status = "executed"
+    if progress_callback:
+        progress_callback("movimiento", "done")
+        progress_callback("sincronizacion", "start")
     demuca_estimates_path = session_dir / "processed" / "features" / "demuca_estimates.json"
     demuca_source_path = session_dir / "annotations" / "demuca" / "evaluations.json"
     demuca_estimates = (
@@ -315,6 +333,8 @@ def process_session(
         raise ValueError("multimodal_artifact_validation_failed:" + ";".join(artifact_issues))
     summary["artifact_validation"] = "passed"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    if progress_callback:
+        progress_callback("validacion", "done")
     return summary
 
 

@@ -31,6 +31,7 @@ class ServicioAnalisisVideo:
         pose_model: Path | None,
         skip_pose: bool | None,
         session_id_pattern: Any,
+        progress_callback: Callable[[str, str], None] | None = None,
     ) -> dict[str, Any]:
         video_path = video_path.resolve()
         project_root = project_root.resolve()
@@ -96,10 +97,14 @@ class ServicioAnalisisVideo:
             repositorio.escribir_json_atomico(manifest_path, manifest)
 
         with self._pipeline_progress_to_stderr():
-            summary = self._process_session(
+            pipeline_args = (
                 session_id, project_root, window_seconds, max_tail_trim_seconds,
                 None if should_skip_pose else selected_model, should_skip_pose, False,
             )
+            if progress_callback is None:
+                summary = self._process_session(*pipeline_args)
+            else:
+                summary = self._process_session(*pipeline_args, progress_callback=progress_callback)
 
         demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
         if demuca_path.is_file():

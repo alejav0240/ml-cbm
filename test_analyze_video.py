@@ -140,3 +140,12 @@ class AnalyzeVideoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_progress_reporter_emite_fases_en_stderr(self) -> None:
+        reporter = analyze_video.ProgressReporter()
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            reporter("extraccion", "start")
+            reporter("extraccion", "done")
+        salida = stderr.getvalue()
+        self.assertIn("Extracción de audio y vídeo", salida)
+        self.assertIn("100%", salida)
