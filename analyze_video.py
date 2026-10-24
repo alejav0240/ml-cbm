@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -49,16 +50,31 @@ class ProgressReporter:
         self.enabled = enabled
         self.index = 0
         self.total = len(self.LABELS)
+        self._stop_event = threading.Event()
+        self._heartbeat: threading.Thread | None = None
 
     def __call__(self, phase: str, state: str) -> None:
         if not self.enabled or phase not in self.LABELS:
             return
         if state == "start":
             self.index += 1
+            self._stop_event.clear()
             print(f"[{self.index}/{self.total}] {self.LABELS[phase]} [  0%]", file=sys.stderr, flush=True)
-        else:
-            bar = "=" * 24
-            print(f"\r[{self.index}/{self.total}] {self.LABELS[phase]} [{bar}] 100% ✓", file=sys.stderr, flush=True)
+            self._heartbeat = threading.Thread(target=self._show_heartbeat, args=(phase,), daemon=True)
+            self._heartbeat.start()
+            return
+        self._stop_event.set()
+        if self._heartbeat is not None:
+            self._heartbeat.join(timeout=0.2)
+            self._heartbeat = None
+        bar = "=" * 24
+        print(f"\r[{self.index}/{self.total}] {self.LABELS[phase]} [{bar}] 100% ✓", file=sys.stderr, flush=True)
+
+    def _show_heartbeat(self, phase: str) -> None:
+        dots = 0
+        while not self._stop_event.wait(1.0):
+            dots = (dots + 1) % 4
+            print(f"\r[{self.index}/{self.total}] {self.LABELS[phase]} procesando{'.' * dots}    ", file=sys.stderr, flush=True)
 
 
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
