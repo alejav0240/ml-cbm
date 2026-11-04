@@ -60,6 +60,20 @@ python -m mlops.cli drift \
 
 El reporte usa un desplazamiento estandarizado de medias por característica. Es una señal de monitoreo para revisión y no una métrica clínica ni una autorización automática de reentrenamiento. `--fail-on-drift` devuelve código `2` cuando alguna característica supera el umbral.
 
+## Red neuronal experimental
+
+La corrida aislada puede comparar el modelo temporal LSTM con los modelos tabulares:
+
+```bash
+python ml/train_lstm_experiment.py \
+  --dataset ml/artifacts/experimental_videos_20261104/event-windows.csv \
+  --task ml/artifacts/experimental_videos_20261104/task.json \
+  --out-dir ml/artifacts/experimental_videos_20261104/models/lstm \
+  --sequence-length 8 --epochs 20 --experimental
+```
+
+El LSTM usa ocho ventanas consecutivas de cinco segundos, conserva la separación por paciente y guarda `lstm_fusion.pt`, `metrics.json` y `lstm_status.json`. El artefacto queda explícitamente marcado como experimental y no autorizado para producción.
+
 El registro bloquea candidatos cuyo `pipeline_status.json` no esté completado o no tenga `training_authorized=true`. Cada artefacto conserva su hash SHA-256 y la promoción archiva la versión productiva anterior.
 
 Además del modelo y las métricas, el registro captura las huellas de `event-windows.csv` y `patient-split.json` cuando están disponibles, para detectar cambios de datos entre entrenamientos.
