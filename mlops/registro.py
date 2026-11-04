@@ -83,6 +83,10 @@ def registrar_candidato(
     source_artifacts = {
         "model": {"path": str(model_path), "sha256": _sha256(model_path)},
         "metrics": {"path": str(metrics_path), "sha256": _sha256(metrics_path)},
+        "pipeline_status": {
+            "path": str(artefactos_dir / "pipeline_status.json"),
+            "sha256": _sha256(artefactos_dir / "pipeline_status.json"),
+        },
     }
     for name in ("event-windows.csv", "patient-split.json"):
         path = artefactos_dir / name
@@ -96,6 +100,8 @@ def registrar_candidato(
         "source_artifacts": source_artifacts,
         "metrics": _metricas_candidato(metrics),
     }
+    if isinstance(status.get("mlflow_run_id"), str) and status["mlflow_run_id"]:
+        record["mlflow_run_id"] = status["mlflow_run_id"]
     models.append(record)
     registry["models"] = models
     _guardar_atomico(registro_path, registry)

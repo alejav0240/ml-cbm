@@ -12,7 +12,7 @@ class RegistroMLOpsTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir()
-        (self.artifacts / "pipeline_status.json").write_text(json.dumps({"status": "completed", "training_authorized": True}), encoding="utf-8")
+        (self.artifacts / "pipeline_status.json").write_text(json.dumps({"status": "completed", "training_authorized": True, "mlflow_run_id": "run-123"}), encoding="utf-8")
         (self.artifacts / "model.json").write_text("{\"model\": true}\n", encoding="utf-8")
         (self.artifacts / "metrics.json").write_text(json.dumps({"feature_logistic_regression": {"test": {"micro_f1": 0.81, "exact_match_accuracy": 0.4}}}), encoding="utf-8")
         self.registry = self.root / "registry.json"
@@ -25,6 +25,7 @@ class RegistroMLOpsTests(unittest.TestCase):
         self.assertEqual(record["status"], "candidate")
         self.assertEqual(record["metrics"]["micro_f1"], 0.81)
         self.assertEqual(len(record["source_artifacts"]["model"]["sha256"]), 64)
+        self.assertEqual(record["mlflow_run_id"], "run-123")
 
     def test_bloquea_pipeline_no_autorizado(self):
         (self.artifacts / "pipeline_status.json").write_text(json.dumps({"status": "completed", "training_authorized": False}), encoding="utf-8")
