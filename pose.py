@@ -42,10 +42,20 @@ def extract_pose_landmarks(
     output_path: Path,
     sampling_fps: float = 1.0,
     num_poses: int = 4,
+    min_pose_detection_confidence: float = 0.5,
+    min_pose_presence_confidence: float = 0.5,
+    min_tracking_confidence: float = 0.5,
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    if sampling_fps <= 0 or num_poses <= 0:
-        raise ValueError("sampling_fps and num_poses must be positive")
+    if sampling_fps <= 0 or num_poses <= 0 or not all(
+        0.0 < value <= 1.0
+        for value in (
+            min_pose_detection_confidence,
+            min_pose_presence_confidence,
+            min_tracking_confidence,
+        )
+    ):
+        raise ValueError("invalid_pose_configuration")
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"pose output already exists: {output_path}; pass overwrite=True")
     if not model_asset.is_file():
@@ -71,9 +81,9 @@ def extract_pose_landmarks(
         base_options=mp.tasks.BaseOptions(model_asset_path=str(model_asset)),
         running_mode=mp.tasks.vision.RunningMode.VIDEO,
         num_poses=num_poses,
-        min_pose_detection_confidence=0.5,
-        min_pose_presence_confidence=0.5,
-        min_tracking_confidence=0.5,
+        min_pose_detection_confidence=min_pose_detection_confidence,
+        min_pose_presence_confidence=min_pose_presence_confidence,
+        min_tracking_confidence=min_tracking_confidence,
     )
     results: list[dict[str, Any]] = []
     skipped_frames = 0
@@ -146,6 +156,9 @@ def load_pose_landmarks(
     *,
     sampling_fps: float = 1.0,
     num_poses: int = 4,
+    min_pose_detection_confidence: float = 0.5,
+    min_pose_presence_confidence: float = 0.5,
+    min_tracking_confidence: float = 0.5,
 ) -> dict[str, Any]:
     """Reuse pose output only if model and ordered frame hashes still match."""
     if not model_asset.is_file():

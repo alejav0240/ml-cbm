@@ -20,6 +20,8 @@ DEFAULT_TASK_CONFIG = PROJECT_ROOT / "ml" / "task.json"
 REQUIRED_SESSION_SOURCES = {
     "metadata/session.json",
     "annotations/review/annotation_tasks.tsv",
+    "annotations/review/annotation_approval.json",
+    "annotations/review/annotation_guide.md",
     "annotations/visual/events.json",
     "annotations/audio/events.json",
     "annotations/interaction/events.json",

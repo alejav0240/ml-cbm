@@ -90,6 +90,8 @@ def analyze_video(
     pose_model: Path | None = None,
     skip_pose: bool | None = None,
     progress_callback: Callable[[str, str], None] | None = None,
+    prediction_model: Path | None = None,
+    allow_experimental_demo: bool = False,
 ) -> dict[str, Any]:
     """Adaptador CLI para el caso de uso de aplicación."""
     return ServicioAnalisisVideo(probe_duration, process_session).ejecutar(
@@ -97,6 +99,8 @@ def analyze_video(
         window_seconds=window_seconds, max_tail_trim_seconds=max_tail_trim_seconds,
         pose_model=pose_model, skip_pose=skip_pose, session_id_pattern=SESSION_ID_PATTERN,
         progress_callback=progress_callback,
+        prediction_model=prediction_model,
+        allow_experimental_demo=allow_experimental_demo,
     )
 
 
@@ -111,6 +115,12 @@ def main() -> int:
     pose.add_argument("--pose-model", type=Path)
     pose.add_argument("--skip-pose", action="store_true")
     parser.add_argument("--no-progress", action="store_true", help="No mostrar fases ni barras en stderr")
+    parser.add_argument("--prediction-model", type=Path, help="Authorized observable-event model artifact (.json or .joblib)")
+    parser.add_argument(
+        "--allow-experimental-demo",
+        action="store_true",
+        help="Allow the explicitly marked demo model; never enables clinical inference.",
+    )
     args = parser.parse_args()
     reporter = ProgressReporter(enabled=not args.no_progress)
     try:
@@ -123,6 +133,8 @@ def main() -> int:
             pose_model=args.pose_model,
             skip_pose=True if args.skip_pose else None,
             progress_callback=reporter,
+            prediction_model=args.prediction_model,
+            allow_experimental_demo=args.allow_experimental_demo,
         )
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False))

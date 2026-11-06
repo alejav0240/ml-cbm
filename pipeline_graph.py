@@ -14,7 +14,7 @@ NODES = [
     ("join", "Align modalities to reviewed time windows"),
     ("gate", "Approval + audit + label eligibility gates"),
     ("split", "Patient-level train / validation / test split"),
-    ("model", "Majority baseline; evaluate metrics"),
+    ("model", "Feature-based multilabel model + majority baseline comparison"),
     ("tracking", "MLflow: metrics, status, safe artifacts"),
 ]
 

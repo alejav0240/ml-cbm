@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "task": "observable_event_occurrence",
+  "unit_of_analysis": "complete_5_second_window",
+  "minimum_models": [
+    {
+      "name": "majority_baseline",
+      "purpose": "Referencia mínima para comprobar que un modelo supera una estrategia trivial.",
+      "training_required": false
+    },
+    {
+      "name": "feature_logistic_regression",
+      "purpose": "Modelo lineal interpretable sobre características de audio y movimiento.",
+      "training_required": true
+    },
+    {
+      "name": "random_forest",
+      "purpose": "Modelo no lineal robusto para una primera comparación multimodal tabular.",
+      "training_required": true
+    },
+    {
+      "name": "gradient_boosting",
+      "purpose": "Modelo no lineal de segunda fase para comparar con Random Forest.",
+      "training_required": true
+    }
+  ],
+  "data_indicators": [
+    "samples",
+    "patients",
+    "sessions",
+    "missing_feature_rate",
+    "positive_support_per_label",
+    "negative_support_per_label",
+    "patient_leakage"
+  ],
+  "quality_indicators": [
+    "precision_per_label",
+    "recall_per_label",
+    "f1_per_label",
+    "specificity_per_label",
+    "false_positive_rate_per_label",
+    "micro_f1",
+    "macro_f1",
+    "exact_match_accuracy",
+    "micro_specificity",
+    "micro_false_positive_rate"
+  ],
+  "release_rules": {
+    "ground_truth_required": true,
+    "training_authorized_required": true,
+    "patient_split_required": true,
+    "demuca_clinical_use": false,
+    "thresholds": "Se definirán después de obtener suficientes ventanas aprobadas; no se inventan umbrales con datos pendientes."
+  }
+}

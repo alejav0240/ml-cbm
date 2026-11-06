@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from review_approval import load_annotation_approval
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SESSIONS_DIR = PROJECT_ROOT / "dataset" / "dataset" / "sessions"
@@ -21,7 +22,132 @@ PROCESSING_STEPS = (
     "features_extracted",
 )
 FEATURE_FILES = ("audio_features.json", "visual_motion.json")
+DERIVED_MODALITIES = {
+    "pose": ("pose_landmarks.json", ("frames", "model", "source_frames_sha256")),
+    "movement_interaction": (
+        "movement_interaction.json",
+        ("windows", "anonymous_pose_tracker", "interaction_proxy"),
+    ),
+    "vocalization_candidates": (
+        "vocalization_candidates.json",
+        ("candidates", "detector", "speaker_attribution"),
+    ),
+    "acoustic_features": ("acoustic_features.json", ("windows", "features", "source_audio_sha256")),
+}
 REVIEW_TASK_FILE = Path("annotations") / "review" / "annotation_tasks.tsv"
+TASK_CONFIG_PATH = PROJECT_ROOT / "ml" / "task.json"
+APPROVALS_PATH = PROJECT_ROOT / "ml" / "approvals.json"
+
+
+def inspect_human_gates(
+    approvals_path: Path = APPROVALS_PATH,
+    task_config_path: Path = TASK_CONFIG_PATH,
+) -> dict[str, bool]:
+    """Report individually evidenced global approvals; never infer missing gates."""
+    approvals: dict[str, Any] = {}
+    try:
+        loaded = json.loads(approvals_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            approvals = loaded
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        pass
+
+    gates = {}
+    for key in (
+        "task_definition",
+        "annotation_review",
+        "consent_and_privacy",
+        "patient_split",
+    ):
+        record = approvals.get(key)
+        gates[key] = bool(
+            isinstance(record, dict)
+            and record.get("approved") is True
+            and isinstance(record.get("approved_by"), str)
+            and record["approved_by"].strip()
+            and isinstance(record.get("approved_at"), str)
+            and record["approved_at"].strip()
+        )
+
+    try:
+        task = json.loads(task_config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        task = {}
+    gates["prediction_target_defined"] = bool(
+        gates["task_definition"]
+        and isinstance(task, dict)
+        and task.get("status") == "approved"
+    )
+    gates.pop("task_definition")
+    return gates
+
+
+def inspect_derived_modalities(session_dir: Path, session_id: str) -> dict[str, dict[str, Any]]:
+    """Report optional v1 pipeline artifacts without making them training gates."""
+    report: dict[str, dict[str, Any]] = {}
+    for modality, (filename, required_keys) in DERIVED_MODALITIES.items():
+        relative_path = f"processed/features/{filename}"
+        path = session_dir / relative_path
+        if not path.is_file():
+            report[modality] = {
+                "status": "not_generated",
+                "path": relative_path,
+                "training_authorized": False,
+            }
+            continue
+        try:
+            payload = read_json(path)
+            missing = [key for key in required_keys if key not in payload]
+            if payload.get("session_id") != session_id:
+                missing.append("session_id")
+            if modality in {"movement_interaction", "vocalization_candidates"} and (
+                payload.get("training_authorized") is not False
+            ):
+                missing.append("training_authorized=false")
+            if missing:
+                report[modality] = {
+                    "status": "invalid",
+                    "path": relative_path,
+                    "issues": sorted(set(missing)),
+                    "training_authorized": False,
+                }
+            else:
+                report[modality] = {
+                    "status": "available",
+                    "path": relative_path,
+                    "schema_version": payload.get("schema_version"),
+                    "training_authorized": False,
+                }
+        except (OSError, json.JSONDecodeError, ValueError):
+            report[modality] = {
+                "status": "invalid",
+                "path": relative_path,
+                "issues": ["invalid_json"],
+                "training_authorized": False,
+            }
+    return report
+
+
+def inspect_human_gate_scopes(
+    approvals_path: Path = APPROVALS_PATH,
+) -> dict[str, list[str]]:
+    """Expose session scope for approvals that are not global by default."""
+    try:
+        approvals = json.loads(approvals_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        approvals = {}
+    if not isinstance(approvals, dict):
+        approvals = {}
+    scopes = {}
+    for key in ("annotation_review", "consent_and_privacy", "patient_split"):
+        record = approvals.get(key)
+        scope = (
+            record.get("scope_sessions")
+            if isinstance(record, dict) and record.get("approved") is True
+            else None
+        )
+        scopes[key] = sorted({item for item in scope if isinstance(item, str)}) if isinstance(scope, list) else []
+    return scopes
 
 
 def inspect_review_queue(session_dir: Path) -> dict[str, Any]:
@@ -83,12 +209,14 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def annotation_status(item: dict[str, Any]) -> str:
+def annotation_status(item: dict[str, Any], *, human_approved: bool = False) -> str:
     """Do not treat missing review metadata or machine proposals as ground truth."""
-    if item.get("es_ejemplo") is True or item.get("source"):
+    if item.get("es_ejemplo") is True:
         return "example_or_preannotation"
-    if item.get("es_ejemplo") is False:
+    if item.get("es_ejemplo") is False or human_approved:
         return "explicitly_non_example"
+    if item.get("source"):
+        return "example_or_preannotation"
     return "unverified"
 
 
@@ -128,6 +256,8 @@ def inspect_session(session_dir: Path) -> dict[str, Any]:
             blockers.append(f"invalid_feature_json:{filename}")
 
     annotation_files_valid = True
+    approval = load_annotation_approval(session_dir)
+    approved_files = approval["approved_files"] if approval["valid"] else set()
     for modality in MODALITIES:
         annotation_path = session_dir / "annotations" / modality / "events.json"
         if not annotation_path.is_file():
@@ -142,7 +272,11 @@ def inspect_session(session_dir: Path) -> dict[str, Any]:
             for event in events:
                 if not isinstance(event, dict):
                     raise ValueError("event must be an object")
-                counts[annotation_status(event)] += 1
+                relative_path = annotation_path.relative_to(session_dir).as_posix()
+                counts[annotation_status(
+                    event,
+                    human_approved=relative_path in approved_files,
+                )] += 1
         except (OSError, json.JSONDecodeError, ValueError):
             blockers.append(f"invalid_annotation_json:{modality}")
             annotation_files_valid = False
@@ -164,6 +298,9 @@ def inspect_session(session_dir: Path) -> dict[str, Any]:
     if counts["explicitly_non_example"] == 0:
         blockers.append("no_explicitly_non_example_annotations")
 
+    if not approval["valid"]:
+        blockers.extend(approval["issues"])
+
     technical_ready = not any(
         blocker.startswith(
             (
@@ -183,7 +320,9 @@ def inspect_session(session_dir: Path) -> dict[str, Any]:
     return {
         "session_id": session_id,
         "technical_prerequisites_met": technical_ready,
+        "derived_modalities": inspect_derived_modalities(session_dir, session_id),
         "annotation_counts": counts,
+        "annotation_approval_status": "approved" if approval["valid"] else "not_verified",
         "review_queue": inspect_review_queue(session_dir),
         "blockers": blockers,
     }
@@ -196,13 +335,17 @@ def audit_dataset(sessions_dir: Path) -> dict[str, Any]:
         if path.is_dir()
     ] if sessions_dir.is_dir() else []
 
-    # These gates are intentionally explicit: no current machine-readable source
-    # authorizes this tool to treat sessions as training data.
-    human_gates = {
-        "prediction_target_defined": False,
-        "annotation_review_and_adjudication_recorded": False,
-        "privacy_and_consent_approved": False,
-        "patient_level_split_defined": False,
+    human_gates = inspect_human_gates()
+    human_gates["annotation_review_and_adjudication_recorded"] = human_gates.pop(
+        "annotation_review"
+    )
+    human_gates["privacy_and_consent_approved"] = human_gates.pop("consent_and_privacy")
+    human_gates["patient_level_split_defined"] = human_gates.pop("patient_split")
+    raw_scopes = inspect_human_gate_scopes()
+    human_gate_scopes = {
+        "annotation_review_and_adjudication_recorded": raw_scopes["annotation_review"],
+        "privacy_and_consent_approved": raw_scopes["consent_and_privacy"],
+        "patient_level_split_defined": raw_scopes["patient_split"],
     }
     return {
         "schema_version": "1.0",
@@ -213,6 +356,7 @@ def audit_dataset(sessions_dir: Path) -> dict[str, Any]:
         ),
         "training_authorized": False,
         "human_gates": human_gates,
+        "human_gate_scopes": human_gate_scopes,
         "sessions": sessions,
         "notice": "This audit does not certify clinical validity or authorize model training.",
     }

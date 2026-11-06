@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from infraestructura.persistencia_json import RepositorioArtefactos
+from demuca_draft import write_demuca_draft
+from phase2_inference import predict_session, write_predictions
 
 
 class ServicioAnalisisVideo:
@@ -32,6 +34,8 @@ class ServicioAnalisisVideo:
         skip_pose: bool | None,
         session_id_pattern: Any,
         progress_callback: Callable[[str, str], None] | None = None,
+        prediction_model: Path | None = None,
+        allow_experimental_demo: bool = False,
     ) -> dict[str, Any]:
         video_path = video_path.resolve()
         project_root = project_root.resolve()
@@ -111,9 +115,16 @@ class ServicioAnalisisVideo:
             demuca: dict[str, Any] = repositorio.leer_json(demuca_path)
             demuca["status"] = "provisional"
         else:
-            demuca = {"status": "not_available",
-                      "reason": "video_only_has_no_recorded_demuca_evaluation_or_calibrated_model",
-                      "ground_truth": False, "training_authorized": False}
+            draft = write_demuca_draft(session_dir)
+            demuca = {
+                "status": "draft",
+                "data": draft,
+                "path": "processed/features/demuca_draft.json",
+                "review_required": True,
+                "ground_truth": False,
+                "training_authorized": False,
+                "notice": "Default values are placeholders for therapist review; they are not clinical scores.",
+            }
         response = {
             "schema_version": "1.0", "status": summary["status"], "session_id": session_id,
             "input": {"filename": video_path.name, "sha256": source_sha256,
@@ -126,8 +137,17 @@ class ServicioAnalisisVideo:
                              "movement_interaction_status": summary["movement_interaction_status"],
                              "artifact_validation": summary["artifact_validation"]},
             "demuca": demuca,
+            "model_predictions": predict_session(
+                session_dir,
+                prediction_model,
+                window_seconds=window_seconds,
+                allow_experimental_demo=allow_experimental_demo,
+            ),
             "session_relative_path": f"dataset/dataset/sessions/{session_id}",
         }
+        prediction_payload = response["model_predictions"]
+        if prediction_payload["status"] != "unavailable":
+            write_predictions(session_dir, prediction_payload)
         repositorio.escribir_json_atomico(response_path, response)
         return response
 

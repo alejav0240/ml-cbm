@@ -1,0 +1,45 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from models import MultilabelLogisticModel
+from phase2_inference import predict_session
+
+
+class Phase2InferenceTests(unittest.TestCase):
+    def test_returns_unavailable_without_authorized_model(self):
+        result = predict_session(Path("/tmp/not-a-session"), None)
+        self.assertEqual(result["status"], "unavailable")
+
+    def test_applies_authorized_json_model_to_windows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = Path(directory) / "S001"
+            features = session / "processed" / "features"
+            features.mkdir(parents=True)
+            (session / "metadata").mkdir()
+            (session / "metadata" / "session.json").write_text(json.dumps({
+                "technical": {"duration_seconds": 5},
+            }))
+            payload = {"timestamps": [1, 2, 3], "rms_energy": [1, 1, 1], "zero_crossing_rate": [0, 0, 0]}
+            (features / "audio_features.json").write_text(json.dumps(payload))
+            (features / "visual_motion.json").write_text(json.dumps({
+                "timestamps": [1, 2, 3], "motion_intensity": [1, 1, 1],
+            }))
+            model = MultilabelLogisticModel().fit([
+                {"audio_rms_mean": 0, "audio_zcr_mean": 0, "visual_motion_mean": 0, "visual_motion_max": 0, "audio__SILENCIO": 0},
+                {"audio_rms_mean": 1, "audio_zcr_mean": 1, "visual_motion_mean": 1, "visual_motion_max": 1, "audio__SILENCIO": 1},
+            ], ["audio__SILENCIO"])
+            artifact = {
+                "training_authorized": True,
+                "models": {"feature_logistic_regression": model.to_dict()},
+            }
+            model_path = Path(directory) / "model.json"
+            model_path.write_text(json.dumps(artifact))
+            result = predict_session(session, model_path)
+            self.assertEqual(result["status"], "provisional")
+            self.assertEqual(result["windows"][0]["predictions"]["audio__SILENCIO"], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

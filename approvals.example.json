@@ -7,12 +7,14 @@
   "annotation_review": {
     "approved": false,
     "approved_by": "",
-    "approved_at": ""
+    "approved_at": "",
+    "scope_sessions": []
   },
   "consent_and_privacy": {
     "approved": false,
     "approved_by": "",
-    "approved_at": ""
+    "approved_at": "",
+    "scope_sessions": []
   },
   "patient_split": {
     "approved": false,

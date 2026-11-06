@@ -67,17 +67,33 @@ def log_run(
 def flatten_metrics(payload: dict[str, Any]) -> dict[str, float]:
     """Extract numeric metrics from split reports without logging examples or IDs."""
     flattened: dict[str, float] = {}
-    for split_name, report in payload.items():
-        if not isinstance(report, dict):
+    for group_name, group in payload.items():
+        if not isinstance(group, dict):
             continue
-        for metric_name in ("micro_f1", "exact_match_accuracy"):
-            value = report.get(metric_name)
-            if isinstance(value, (int, float)) and math.isfinite(float(value)):
-                flattened[f"{split_name}_{metric_name}"] = float(value)
-        for label_name, label_metrics in report.get("per_label", {}).items():
-            if not isinstance(label_metrics, dict):
-                continue
-            value = label_metrics.get("f1")
-            if isinstance(value, (int, float)) and math.isfinite(float(value)):
-                flattened[f"{split_name}_{label_name}_f1"] = float(value)
+        reports = (
+            {group_name: group}
+            if "micro_f1" in group or "exact_match_accuracy" in group
+            else {
+                f"{group_name}_{split_name}": report
+                for split_name, report in group.items()
+                if isinstance(report, dict)
+            }
+        )
+        for report_name, report in reports.items():
+            for metric_name in (
+                "micro_f1",
+                "macro_f1",
+                "exact_match_accuracy",
+                "micro_specificity",
+                "micro_false_positive_rate",
+            ):
+                value = report.get(metric_name)
+                if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                    flattened[f"{report_name}_{metric_name}"] = float(value)
+            for label_name, label_metrics in report.get("per_label", {}).items():
+                if not isinstance(label_metrics, dict):
+                    continue
+                value = label_metrics.get("f1")
+                if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                    flattened[f"{report_name}_{label_name}_f1"] = float(value)
     return flattened

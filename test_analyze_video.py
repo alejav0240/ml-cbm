@@ -48,8 +48,11 @@ class AnalyzeVideoTests(unittest.TestCase):
             self.assertEqual(manifest["fragments"][0]["video_path"], "raw/input.mp4")
             self.assertEqual(response["status"], "completed")
             self.assertEqual(response["observations"]["acoustic_windows"], 2)
-            self.assertEqual(response["demuca"]["status"], "not_available")
-            self.assertNotIn("predicted_score", json.dumps(response))
+            self.assertEqual(response["demuca"]["status"], "draft")
+            self.assertTrue(response["demuca"]["review_required"])
+            self.assertEqual(response["demuca"]["data"]["sesion_id"], "UPLOAD-001")
+            self.assertEqual(response["demuca"]["data"]["movimiento_corporal"]["andar"], 0)
+            self.assertEqual(response["model_predictions"]["status"], "unavailable")
             self.assertEqual(
                 json.loads((session / "processed" / "analysis_response.json").read_text()),
                 response,

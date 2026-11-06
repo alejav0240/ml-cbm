@@ -37,9 +37,34 @@ writes the same response to
 It runs the audio-capable stages by default; pose inference is opt-in with
 `--pose-model /path/to/model.task` (or explicitly `--skip-pose`).
 
-For a video-only session, the response reports observable artifact summaries.
-DEMUCA is returned as `status: "not_available"` unless the session contains a
-recorded evaluation; the command does not fabricate clinical scores or confidence.
+An authorized observable-event model can be applied with
+`--prediction-model ml/artifacts/model.json` (or an authorized phase-two
+`.joblib`). The response then includes `model_predictions` and writes
+`processed/features/model_predictions.json`. Without an authorized model the
+field reports `status=unavailable`; DEMUCA placeholders are never treated as
+model predictions.
+
+Para preparar las ventanas reales destinadas a revisión del terapeuta, sin
+crear etiquetas de entrenamiento, ejecute:
+
+```bash
+python ml/prepare_prediction_review.py \
+  --sessions-dir dataset/dataset/sessions \
+  --out-dir dataset/dataset/prediction_review \
+  --overwrite
+```
+
+La salida es `prediction_review_windows.json` junto con su manifest. Cada
+ventana conserva sus características, el estado de la tarea de revisión, la
+predicción disponible y un espacio `human_labels` inicialmente vacío. El
+paquete mantiene `ground_truth=false` y `training_authorized=false` hasta que
+el terapeuta complete y apruebe la revisión.
+
+For a video-only session, the response reports observable artifact summaries and a
+therapist-editable DEMUCA draft. The draft uses the requested six domains with
+zero placeholders, requires human review, and never claims to be a clinical score.
+When a recorded evaluation exists, the existing provisional estimate remains the
+source of the response instead.
 
 ## Produced artifacts
 
@@ -52,6 +77,7 @@ recorded evaluation; the command does not fabricate clinical scores or confidenc
 | 20 | `processed/features/vocalization_candidates.json` | Periodic voiced-sound candidates without speaker attribution; `training_authorized=false`. |
 | 21 | `processed/features/acoustic_features.json` | RMS, ZCR, spectral descriptors, MFCCs, pitch median, and voiced-frame fraction on the shared window grid. |
 | Provisional DEMUCA output | `processed/features/demuca_estimates.json` | Recorded score plus bounded observational-support percentage for every subscale; not a calibrated probability, clinical result, or training target. |
+| DEMUCA therapist draft | `processed/features/demuca_draft.json` | Requested six-domain editable shape with zero placeholders; `review_required=true`, `ground_truth=false`, and `training_authorized=false`. |
 
 `processed/segments/multimodal_manifest.json` aligns pose frames, acoustic windows,
 vocalization candidates, and movement windows to each synchronized segment.
@@ -71,6 +97,11 @@ the audio, visual, and interaction artifacts. It is capped at 49% while the
 evaluation lacks clinical approval, and the artifact always declares
 `calibration_status=not_calibrated`, `ground_truth=false`, and
 `training_authorized=false`.
+
+When no recorded evaluation exists, `analyze_video.py` returns `demuca.status="draft"`
+and points to `processed/features/demuca_draft.json`. Its zero values are empty
+workflow defaults for the therapist, not model predictions; the therapist must
+replace them before clinical interpretation.
 
 ## S001 execution evidence
 

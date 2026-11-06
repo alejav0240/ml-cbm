@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "status": "provisional",
+  "status": "approved",
   "task": "observable_event_occurrence",
   "formulation": "multilabel classification per temporal window",
   "window_seconds": 5,
@@ -32,7 +32,37 @@
       "INTERACCION_VERBAL"
     ]
   },
-  "positive_label_rule": "An event overlaps the window, has es_ejemplo=false, and has no source field.",
+  "label_definitions_version": "1.0",
+  "label_target_entity": "patient",
+  "label_definitions": {
+    "visual": {
+      "MOVIMIENTO": {"description": "Observable body displacement or change of position by the patient.", "positive_examples": ["The patient walks, runs, or changes location."], "negative_examples": ["The therapist moves while the patient remains still."], "target": "patient", "observable": true},
+      "MOVIMIENTO_REPETITIVO": {"description": "Repeated body movement by the patient with a recognizable recurring pattern.", "positive_examples": ["The patient repeats the same rocking or hand movement."], "negative_examples": ["A single isolated gesture without repetition."], "target": "patient", "observable": true},
+      "CONTACTO_VISUAL": {"description": "The patient directs their gaze toward another person or relevant object.", "positive_examples": ["The patient's eyes are oriented toward the educator."], "negative_examples": ["The face is turned away or the gaze target cannot be determined."], "target": "patient", "observable": true},
+      "INTERACCION_OBJETO": {"description": "The patient intentionally touches, manipulates, or uses a visible object.", "positive_examples": ["The patient picks up or manipulates an object."], "negative_examples": ["The object is visible but the patient does not act on it."], "target": "patient", "observable": true},
+      "ORIENTACION_CORPORAL": {"description": "The patient's torso or body is oriented toward a person, object, or activity.", "positive_examples": ["The patient's torso turns toward the instrument."], "negative_examples": ["Only another person's orientation is visible."], "target": "patient", "observable": true}
+    },
+    "audio": {
+      "VOCALIZACION": {"description": "A non-silent vocal sound produced by the patient without requiring verified speech content.", "positive_examples": ["The patient produces an audible vocal sound."], "negative_examples": ["The sound is music, an instrument, or an unidentified environmental noise."], "target": "patient", "observable": true},
+      "HABLA": {"description": "The patient produces discernible spoken language or speech-like verbal output.", "positive_examples": ["Words or clearly speech-like utterances are audible from the patient."], "negative_examples": ["Only instrumental sound or an unassigned voice is audible."], "target": "patient", "observable": true},
+      "RISA": {"description": "Laughter produced by the patient is audible in the window.", "positive_examples": ["The patient's laugh is audible and attributable."], "negative_examples": ["Laughter is absent or belongs to another person."], "target": "patient", "observable": true},
+      "LLANTO": {"description": "Crying or sobbing produced by the patient is audible in the window.", "positive_examples": ["The patient's crying is audible and attributable."], "negative_examples": ["Crying is absent or belongs to another person."], "target": "patient", "observable": true},
+      "GRITO": {"description": "A high-intensity vocal outburst produced by the patient is audible.", "positive_examples": ["The patient emits an attributable shout or scream."], "negative_examples": ["The loud sound is music, an instrument, or another person."], "target": "patient", "observable": true},
+      "SILENCIO": {"description": "No attributable patient vocal activity is detected during the complete reviewed window.", "positive_examples": ["The patient remains vocally silent throughout the reviewed window."], "negative_examples": ["An attributable patient vocalization occurs in the window."], "target": "patient", "observable": true},
+      "ACTIVIDAD_MUSICAL": {"description": "The patient produces or actively participates in an attributable musical sound.", "positive_examples": ["The patient plays an instrument or sings as part of the activity."], "negative_examples": ["Music is present but the patient is not the attributable source."], "target": "patient", "observable": true}
+    },
+    "interaction": {
+      "MIRADA": {"description": "The patient looks toward a person or object as part of an observable interaction.", "positive_examples": ["The patient looks at the educator during an exchange."], "negative_examples": ["No interaction target can be identified."], "target": "patient", "observable": true},
+      "GESTO": {"description": "The patient makes an intentional communicative or expressive gesture.", "positive_examples": ["The patient points, waves, nods, or uses another attributable gesture."], "negative_examples": ["An involuntary or indeterminate movement without communicative context."], "target": "patient", "observable": true},
+      "TACTO": {"description": "The patient makes attributable physical contact with a person or object.", "positive_examples": ["The patient touches the educator, peer, or object."], "negative_examples": ["Contact belongs to another person or cannot be attributed."], "target": "patient", "observable": true},
+      "IMITACION": {"description": "The patient visibly reproduces a preceding movement, gesture, sound, or musical action.", "positive_examples": ["The patient repeats an action immediately after the educator demonstrates it."], "negative_examples": ["The action occurs without an identifiable preceding model."], "target": "patient", "observable": true},
+      "RESPUESTA": {"description": "The patient produces an observable response to a person, object, sound, or prompt.", "positive_examples": ["The patient turns, gestures, vocalizes, or acts after a prompt."], "negative_examples": ["No attributable response follows the stimulus."], "target": "patient", "observable": true},
+      "ACTIVIDAD_CONJUNTA": {"description": "The patient and another person participate in the same observable activity.", "positive_examples": ["The patient and educator act on the same musical activity."], "negative_examples": ["People are present but activities are unrelated."], "target": "patient", "observable": true},
+      "INTERACCION_MUSICAL": {"description": "The patient exchanges or coordinates musical actions with another participant.", "positive_examples": ["The patient alternates, responds, or coordinates playing with the educator."], "negative_examples": ["The patient is merely near an instrument without musical exchange."], "target": "patient", "observable": true},
+      "INTERACCION_VERBAL": {"description": "The patient participates in an attributable verbal exchange.", "positive_examples": ["The patient answers, initiates, or responds verbally to another person."], "negative_examples": ["Speech is absent, unassigned, or not part of an exchange."], "target": "patient", "observable": true}
+    }
+  },
+  "positive_label_rule": "An event overlaps the window and is either explicitly marked es_ejemplo=false without a source field, or belongs to an annotation file covered by a valid human approval record whose source hashes match.",
   "negative_label_rule": "A label is negative only inside a complete window covered by a done annotation task, which means all applicable modalities were reviewed.",
   "review_task_requirements": [
     "status=done",
@@ -47,8 +77,38 @@
     "audio_rms_mean",
     "audio_zcr_mean",
     "visual_motion_mean",
-    "visual_motion_max"
+    "visual_motion_max",
+    "visual_gt_detection_count_mean",
+    "visual_gt_detection_count_max",
+    "visual_gt_person_count_mean",
+    "visual_gt_person_count_max"
   ],
+  "optional_derived_modalities": {
+    "acoustic_features": {
+      "artifact": "processed/features/acoustic_features.json",
+      "schema_version": "1.0",
+      "status": "available_not_selected_for_training",
+      "training_authorized": false
+    },
+    "pose_landmarks": {
+      "artifact": "processed/features/pose_landmarks.json",
+      "schema_version": "1.0",
+      "status": "provisional_not_selected_for_training",
+      "training_authorized": false
+    },
+    "movement_interaction": {
+      "artifact": "processed/features/movement_interaction.json",
+      "schema_version": "1.0",
+      "status": "provisional_not_selected_for_training",
+      "training_authorized": false
+    },
+    "vocalization_candidates": {
+      "artifact": "processed/features/vocalization_candidates.json",
+      "schema_version": "1.0",
+      "status": "provisional_not_selected_for_training",
+      "training_authorized": false
+    }
+  },
   "exclusions": [
     "DEMUCA clinical scores are not targets in this task.",
     "Example, machine-proposed, or unverified annotations are not labels.",

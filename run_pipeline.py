@@ -13,6 +13,8 @@ from typing import Any
 from audit_dataset import DEFAULT_SESSIONS_DIR, PROJECT_ROOT, audit_dataset, read_json
 from prepare_dataset import build_rows, write_dataset
 from pipeline_graph import write_pipeline_graph
+from models import FEATURE_COLUMNS, MultilabelLogisticModel
+from label_contract import validate_task_contract
 from tracking import flatten_metrics, log_run
 
 
@@ -43,6 +45,32 @@ def approval_blockers(approvals_path: Path) -> list[str]:
             continue
         if not record.get("approved_by") or not record.get("approved_at"):
             blockers.append(f"approval_provenance_missing:{key}")
+        if key in {"annotation_review", "consent_and_privacy"} and (
+            not isinstance(record.get("scope_sessions"), list)
+            or not record["scope_sessions"]
+            or not all(isinstance(session_id, str) and session_id for session_id in record["scope_sessions"])
+        ):
+            blockers.append(f"approval_scope_missing:{key}")
+    return blockers
+
+
+def approval_scope_blockers(
+    approvals_path: Path,
+    candidate_sessions: set[str],
+) -> list[str]:
+    try:
+        approvals = read_json(approvals_path)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return []
+    blockers = []
+    for key in ("annotation_review", "consent_and_privacy"):
+        record = approvals.get(key)
+        if not isinstance(record, dict) or record.get("approved") is not True:
+            continue
+        approved_sessions = set(record.get("scope_sessions", []))
+        outside_scope = sorted(candidate_sessions - approved_sessions)
+        if outside_scope:
+            blockers.append(f"approval_scope_exceeded:{key}:" + ",".join(outside_scope))
     return blockers
 
 
@@ -91,36 +119,63 @@ def fit_majority_baseline(rows: list[dict[str, Any]], label_columns: list[str]) 
 def evaluate_predictions(
     rows: list[dict[str, Any]], predictions: dict[str, int], label_columns: list[str]
 ) -> dict[str, Any]:
+    return evaluate_row_predictions(rows, [predictions] * len(rows), label_columns)
+
+
+def evaluate_row_predictions(
+    rows: list[dict[str, Any]],
+    predictions: list[dict[str, int]],
+    label_columns: list[str],
+) -> dict[str, Any]:
     if not rows:
-        return {"samples": 0, "per_label": {}, "micro_f1": None, "exact_match_accuracy": None}
+        return {
+            "samples": 0,
+            "per_label": {},
+            "micro_f1": None,
+            "macro_f1": None,
+            "exact_match_accuracy": None,
+        }
+    if len(rows) != len(predictions):
+        raise ValueError("prediction_count_must_match_row_count")
 
     per_label: dict[str, Any] = {}
-    total_tp = total_fp = total_fn = exact_matches = 0
+    total_tp = total_fp = total_fn = total_tn = exact_matches = 0
+    label_f1_values: list[float] = []
     for label in label_columns:
-        tp = fp = fn = support = 0
-        for row in rows:
+        tp = fp = fn = tn = support = 0
+        predicted_positive = 0
+        for row_index, row in enumerate(rows):
             actual = int(row[label])
-            predicted = predictions[label]
+            predicted = predictions[row_index][label]
             support += actual
+            predicted_positive += int(predicted)
             tp += int(actual == 1 and predicted == 1)
             fp += int(actual == 0 and predicted == 1)
             fn += int(actual == 1 and predicted == 0)
+            tn += int(actual == 0 and predicted == 0)
         precision = tp / (tp + fp) if tp + fp else 0.0
         recall = tp / (tp + fn) if tp + fn else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        specificity = tn / (tn + fp) if tn + fp else 0.0
         per_label[label] = {
             "support": support,
-            "predicted_positive": predictions[label] * len(rows),
+            "predicted_positive": predicted_positive,
             "precision": precision,
             "recall": recall,
             "f1": f1,
+            "specificity": specificity,
+            "false_positive_rate": 1.0 - specificity,
         }
+        label_f1_values.append(f1)
         total_tp += tp
         total_fp += fp
         total_fn += fn
+        total_tn += tn
 
-    for row in rows:
-        exact_matches += int(all(int(row[label]) == predictions[label] for label in label_columns))
+    for row_index, row in enumerate(rows):
+        exact_matches += int(
+            all(int(row[label]) == predictions[row_index][label] for label in label_columns)
+        )
     micro_f1 = (
         2 * total_tp / (2 * total_tp + total_fp + total_fn)
         if 2 * total_tp + total_fp + total_fn
@@ -130,7 +185,10 @@ def evaluate_predictions(
         "samples": len(rows),
         "per_label": per_label,
         "micro_f1": micro_f1,
+        "macro_f1": sum(label_f1_values) / len(label_f1_values) if label_f1_values else 0.0,
         "exact_match_accuracy": exact_matches / len(rows),
+        "micro_specificity": total_tn / (total_tn + total_fp) if total_tn + total_fp else 0.0,
+        "micro_false_positive_rate": total_fp / (total_tn + total_fp) if total_tn + total_fp else 0.0,
     }
 
 
@@ -145,6 +203,7 @@ def run_pipeline(
     blockers = approval_blockers(approvals_path)
     audit = audit_dataset(sessions_dir)
     task = read_json(task_config)
+    validate_task_contract(task)
     rows, skipped = build_rows(sessions_dir, task)
 
     if task.get("status") != "approved":
@@ -160,6 +219,7 @@ def run_pipeline(
         if session["technical_prerequisites_met"]
     }
     candidate_sessions = {row["session_id"] for row in rows}
+    blockers.extend(approval_scope_blockers(approvals_path, candidate_sessions))
     unchecked_sessions = sorted(candidate_sessions - audit_ready_sessions)
     if unchecked_sessions:
         blockers.append("candidate_sessions_fail_audit:" + ",".join(unchecked_sessions))
@@ -191,10 +251,25 @@ def run_pipeline(
         for modality, labels in task["label_sources"].items()
         for label in labels
     ]
-    model = fit_majority_baseline(splits["train"], label_columns)
+    majority_predictions = fit_majority_baseline(splits["train"], label_columns)
+    feature_model = MultilabelLogisticModel(
+        feature_columns=tuple(task.get("features", FEATURE_COLUMNS))
+    ).fit(
+        splits["train"], label_columns, seed=seed
+    )
     metrics = {
-        split_name: evaluate_predictions(split_rows, model, label_columns)
-        for split_name, split_rows in splits.items()
+        "majority_baseline": {
+            split_name: evaluate_predictions(split_rows, majority_predictions, label_columns)
+            for split_name, split_rows in splits.items()
+        },
+        "feature_logistic_regression": {
+            split_name: evaluate_row_predictions(
+                split_rows,
+                feature_model.predict(split_rows),
+                label_columns,
+            )
+            for split_name, split_rows in splits.items()
+        },
     }
 
     dataset_path = output_dir / "event-windows.csv"
@@ -212,9 +287,14 @@ def run_pipeline(
     (output_dir / "model.json").write_text(
         json.dumps(
             {
-                "model_type": "per_label_majority_baseline",
+                "models": {
+                    "majority_baseline": {
+                        "model_type": "per_label_majority_baseline",
+                        "predictions": majority_predictions,
+                    },
+                    "feature_logistic_regression": feature_model.to_dict(),
+                },
                 "seed": seed,
-                "predictions": model,
                 "training_authorized": True,
             },
             indent=2,

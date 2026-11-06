@@ -9,8 +9,19 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from audit_dataset import PROJECT_ROOT, audit_dataset, inspect_review_queue
-from prepare_dataset import build_rows, load_reviewed_intervals, write_dataset
+from audit_dataset import (
+    PROJECT_ROOT,
+    audit_dataset,
+    inspect_human_gate_scopes,
+    inspect_human_gates,
+    inspect_review_queue,
+)
+from prepare_dataset import (
+    build_rows,
+    load_reviewed_intervals,
+    source_hashes_for_session,
+    write_dataset,
+)
 from media import (
     normalize_manifest_fragments,
     probe_duration,
@@ -24,7 +35,9 @@ from pipeline_graph import write_pipeline_graph
 from session_manifest import validate_session_manifest
 from run_pipeline import (
     approval_blockers,
+    approval_scope_blockers,
     evaluate_predictions,
+    evaluate_row_predictions,
     fit_majority_baseline,
     run_pipeline,
     split_by_patient,
@@ -34,6 +47,30 @@ from verify_dataset_manifest import verify_dataset_manifest
 
 
 class AuditDatasetTests(unittest.TestCase):
+    def test_human_gates_report_only_approved_task_with_provenance(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            approvals_path = root / "approvals.json"
+            task_path = root / "task.json"
+            approvals_path.write_text(json.dumps({
+                "task_definition": {
+                    "approved": True,
+                    "approved_by": "A1",
+                    "approved_at": "2026-10-18",
+                },
+            }), encoding="utf-8")
+            task_path.write_text(json.dumps({"status": "provisional"}), encoding="utf-8")
+
+            provisional = inspect_human_gates(approvals_path, task_path)
+            task_path.write_text(json.dumps({"status": "approved"}), encoding="utf-8")
+            approved = inspect_human_gates(approvals_path, task_path)
+
+        self.assertFalse(provisional["prediction_target_defined"])
+        self.assertTrue(approved["prediction_target_defined"])
+        self.assertFalse(approved["annotation_review"])
+        self.assertFalse(approved["consent_and_privacy"])
+        self.assertFalse(approved["patient_split"])
+
     def test_review_queue_audit_is_aggregated_and_reports_human_gates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = Path(temp_dir) / "S001"
@@ -255,7 +292,8 @@ class AuditDatasetTests(unittest.TestCase):
             session = Path(temp_dir) / "S001"
             (session / "metadata").mkdir(parents=True)
             (session / "processed" / "features").mkdir(parents=True)
-            (session / "annotations" / "review").mkdir(parents=True)
+            review_dir = session / "annotations" / "review"
+            review_dir.mkdir(parents=True)
             for modality in ("visual", "audio", "interaction"):
                 (session / "annotations" / modality).mkdir(parents=True)
 
@@ -312,6 +350,33 @@ class AuditDatasetTests(unittest.TestCase):
                     json.dumps({"session_id": "S001", "events": events}),
                     encoding="utf-8",
                 )
+            annotation_files = {
+                f"annotations/{modality}/events.json": hashlib.sha256(
+                    (session / "annotations" / modality / "events.json").read_bytes()
+                ).hexdigest()
+                for modality in ("visual", "audio", "interaction")
+            }
+            guide_path = review_dir / "annotation_guide.md"
+            guide_path.write_text("Synthetic approved guide", encoding="utf-8")
+            (review_dir / "annotation_approval.json").write_text(
+                json.dumps({
+                    "schema_version": "1.0",
+                    "session_id": "S001",
+                    "annotations": {
+                        "status": "approved", "approved_by": "G1",
+                        "approved_at": "2026-10-17", "annotator_primary": "A1",
+                        "reviewer": "R1",
+                    },
+                    "guide": {
+                        "status": "approved", "version": "1.0",
+                        "approved_by": "G1", "approved_at": "2026-10-17",
+                        "path": "annotations/review/annotation_guide.md",
+                        "sha256": hashlib.sha256(guide_path.read_bytes()).hexdigest(),
+                    },
+                    "annotation_files_sha256": annotation_files,
+                }),
+                encoding="utf-8",
+            )
 
             task = {
                 "task": "observable_event_occurrence",
@@ -327,13 +392,96 @@ class AuditDatasetTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["start_seconds"], 0)
             self.assertEqual(rows[0]["visual__MOVIMIENTO"], 1)
+            self.assertEqual(rows[0]["window_id"], "S001_W0000")
+            self.assertEqual(rows[0]["annotation_status"], "approved")
+            self.assertTrue(rows[0]["ground_truth"])
+            self.assertFalse(rows[0]["training_authorized"])
             self.assertEqual(skipped, [])
+
+            reviewed_task = {
+                **task,
+                "features": [
+                    "audio_rms_mean",
+                    "audio_zcr_mean",
+                    "visual_motion_mean",
+                    "visual_motion_max",
+                    "visual_gt_detection_count_mean",
+                    "visual_gt_detection_count_max",
+                    "visual_gt_person_count_mean",
+                    "visual_gt_person_count_max",
+                ],
+            }
+            reviewed_features = {
+                "S001_W0000": {
+                    "visual_gt_detection_count_mean": 2.0,
+                    "visual_gt_detection_count_max": 3.0,
+                    "visual_gt_person_count_mean": 1.0,
+                    "visual_gt_person_count_max": 1.0,
+                }
+            }
+            with patch(
+                "prepare_dataset.reviewed_visual_features_by_window",
+                return_value=reviewed_features,
+            ):
+                reviewed_rows, reviewed_skipped = build_rows(Path(temp_dir), reviewed_task)
+            self.assertEqual(reviewed_rows[0]["visual_gt_detection_count_mean"], 2.0)
+            self.assertEqual(reviewed_rows[0]["visual_gt_person_count_max"], 1.0)
+            self.assertEqual(reviewed_skipped, [])
+
+            experimental_rows, experimental_skipped = build_rows(
+                Path(temp_dir), task, allow_unreviewed=True
+            )
+            self.assertEqual(len(experimental_rows), 2)
+            self.assertTrue(all(row["annotation_status"] == "unreviewed" for row in experimental_rows))
+            self.assertTrue(all(not row["ground_truth"] for row in experimental_rows))
+            self.assertEqual(experimental_skipped, [])
+
+            subset_task = {
+                **task,
+                "features": [
+                    "audio_rms_mean",
+                    "audio_zcr_mean",
+                    "visual_motion_mean",
+                    "visual_motion_max",
+                    "visual_gt_person_count_mean",
+                ],
+            }
+            with patch(
+                "prepare_dataset.reviewed_visual_features_by_window",
+                return_value=reviewed_features,
+            ):
+                subset_rows, _ = build_rows(Path(temp_dir), subset_task)
+            self.assertEqual(subset_rows[0]["visual_gt_person_count_mean"], 1.0)
+            self.assertNotIn("visual_gt_detection_count_mean", subset_rows[0])
+
+            vision_dir = session / "processed" / "vision"
+            visual_review_dir = vision_dir / "review"
+            visual_review_dir.mkdir(parents=True, exist_ok=True)
+            source_video = session / "processed" / "review-source.mp4"
+            source_video.write_bytes(b"review-source")
+            (session / "processed" / "windows").mkdir(parents=True, exist_ok=True)
+            (session / "processed" / "windows" / "windows.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (vision_dir / "detections_and_tracks.json").write_text(
+                json.dumps({"source_video": "processed/review-source.mp4"}),
+                encoding="utf-8",
+            )
+            (visual_review_dir / "review_manifest.json").write_text("{}", encoding="utf-8")
+            (visual_review_dir / "review_frames.csv").write_text("sample_id\n", encoding="utf-8")
+            source_hashes = source_hashes_for_session(
+                session,
+                feature_columns=tuple(reviewed_task["features"]),
+            )
+            self.assertIn("processed/review-source.mp4", source_hashes)
 
             output = Path(temp_dir) / "prepared.csv"
             write_dataset(rows, skipped, task, output, sessions_dir=Path(temp_dir))
             dataset_manifest = json.loads(
                 output.with_suffix(".csv.manifest.json").read_text(encoding="utf-8")
             )
+            self.assertEqual(dataset_manifest["ground_truth_rows"], 1)
+            self.assertEqual(dataset_manifest["review_required_rows"], 0)
             task_file = session / "annotations" / "review" / "annotation_tasks.tsv"
             expected_task_hash = hashlib.sha256(task_file.read_bytes()).hexdigest()
             self.assertEqual(
@@ -357,6 +505,21 @@ class AuditDatasetTests(unittest.TestCase):
             self.assertTrue(verification["valid"], verification["issues"])
 
             visual_path = session / "annotations" / "visual" / "events.json"
+            visual_data = json.loads(visual_path.read_text(encoding="utf-8"))
+            visual_data["events"][0].pop("es_ejemplo")
+            visual_data["events"][0]["source"] = "automatic_proposal"
+            visual_path.write_text(json.dumps(visual_data), encoding="utf-8")
+            approval_path = session / "annotations" / "review" / "annotation_approval.json"
+            approval_data = json.loads(approval_path.read_text(encoding="utf-8"))
+            approval_data["annotation_files_sha256"]["annotations/visual/events.json"] = (
+                hashlib.sha256(visual_path.read_bytes()).hexdigest()
+            )
+            approval_path.write_text(json.dumps(approval_data), encoding="utf-8")
+            rows, skipped = build_rows(Path(temp_dir), task)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["visual__MOVIMIENTO"], 1)
+            self.assertEqual(skipped, [])
+
             visual_data = json.loads(visual_path.read_text(encoding="utf-8"))
             visual_data["events"].append(
                 {"start_seconds": 3, "end_seconds": 4, "type": "MOVIMIENTO"}
@@ -421,12 +584,83 @@ class AuditDatasetTests(unittest.TestCase):
         self.assertEqual(metrics["samples"], 3)
         self.assertEqual(metrics["per_label"]["event_a"]["support"], 1)
 
+    def test_row_predictions_are_evaluated_per_sample(self):
+        rows = [{"event_a": 0}, {"event_a": 1}]
+
+        metrics = evaluate_row_predictions(
+            rows,
+            [{"event_a": 0}, {"event_a": 1}],
+            ["event_a"],
+        )
+
+        self.assertEqual(metrics["per_label"]["event_a"]["predicted_positive"], 1)
+        self.assertEqual(metrics["micro_f1"], 1.0)
+        self.assertEqual(metrics["macro_f1"], 1.0)
+        self.assertEqual(metrics["micro_false_positive_rate"], 0.0)
+
     def test_missing_human_approvals_block_pipeline(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             blockers = approval_blockers(Path(temp_dir) / "approvals.json")
 
         self.assertEqual(len(blockers), 1)
         self.assertTrue(blockers[0].startswith("missing_approvals_file:"))
+
+    def test_scoped_approvals_require_scope_and_reject_unapproved_candidate_sessions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            approvals_path = Path(temp_dir) / "approvals.json"
+            approvals_path.write_text(json.dumps({
+                "task_definition": {
+                    "approved": True, "approved_by": "A", "approved_at": "2026-10-18"
+                },
+                "annotation_review": {
+                    "approved": True, "approved_by": "R", "approved_at": "2026-10-18",
+                    "scope_sessions": ["S001"],
+                },
+                "consent_and_privacy": {
+                    "approved": True, "approved_by": "A", "approved_at": "2026-10-18",
+                    "scope_sessions": ["S001"],
+                },
+                "patient_split": {
+                    "approved": True, "approved_by": "A", "approved_at": "2026-10-18"
+                },
+            }), encoding="utf-8")
+
+            blockers = approval_blockers(approvals_path)
+            outside_scope = approval_scope_blockers(approvals_path, {"S001", "S002"})
+            scopes = inspect_human_gate_scopes(approvals_path)
+
+        self.assertEqual(blockers, [])
+        self.assertEqual(scopes["annotation_review"], ["S001"])
+        self.assertEqual(scopes["consent_and_privacy"], ["S001"])
+        self.assertEqual(
+            outside_scope,
+            [
+                "approval_scope_exceeded:annotation_review:S002",
+                "approval_scope_exceeded:consent_and_privacy:S002",
+            ],
+        )
+
+    def test_approved_session_gates_without_scope_are_blocked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            approvals_path = Path(temp_dir) / "approvals.json"
+            approvals_path.write_text(json.dumps({
+                key: {
+                    "approved": True,
+                    "approved_by": "A1",
+                    "approved_at": "2026-10-18",
+                }
+                for key in (
+                    "task_definition",
+                    "annotation_review",
+                    "consent_and_privacy",
+                    "patient_split",
+                )
+            }), encoding="utf-8")
+
+            blockers = approval_blockers(approvals_path)
+
+        self.assertIn("approval_scope_missing:annotation_review", blockers)
+        self.assertIn("approval_scope_missing:consent_and_privacy", blockers)
 
     def test_pipeline_writes_only_blocker_report_without_approved_data(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -511,9 +745,41 @@ class AuditDatasetTests(unittest.TestCase):
                         json.dumps({"session_id": session_id, "events": events}),
                         encoding="utf-8",
                     )
+                file_hashes = {
+                    f"annotations/{modality}/events.json": hashlib.sha256(
+                        (session / "annotations" / modality / "events.json").read_bytes()
+                    ).hexdigest()
+                    for modality in ("visual", "audio", "interaction")
+                }
+                guide_path = session / "annotations" / "review" / "annotation_guide.md"
+                guide_path.write_text("Synthetic test-only guide", encoding="utf-8")
+                approval_path = session / "annotations" / "review" / "annotation_approval.json"
+                approval_path.write_text(
+                    json.dumps({
+                        "schema_version": "1.0",
+                        "session_id": session_id,
+                        "annotations": {
+                            "status": "approved", "approved_by": "SYNTHETIC_TEST_ONLY",
+                            "approved_at": "2026-10-17", "annotator_primary": "SYNTHETIC",
+                            "reviewer": "SYNTHETIC",
+                        },
+                        "guide": {
+                            "status": "approved", "version": "fixture-1",
+                            "approved_by": "SYNTHETIC_TEST_ONLY", "approved_at": "2026-10-17",
+                            "path": "annotations/review/annotation_guide.md",
+                            "sha256": hashlib.sha256(guide_path.read_bytes()).hexdigest(),
+                        },
+                        "annotation_files_sha256": file_hashes,
+                    }),
+                    encoding="utf-8",
+                )
 
             task = json.loads((Path(__file__).parent / "task.json").read_text(encoding="utf-8"))
             task["status"] = "approved"
+            task["features"] = [
+                feature for feature in task["features"]
+                if not feature.startswith("visual_gt_")
+            ]
             task_path = root / "task.json"
             task_path.write_text(json.dumps(task), encoding="utf-8")
             approvals = {
@@ -529,6 +795,10 @@ class AuditDatasetTests(unittest.TestCase):
                     "patient_split",
                 )
             }
+            for key in ("annotation_review", "consent_and_privacy"):
+                approvals[key]["scope_sessions"] = [
+                    f"S{patient_index + 100:03d}" for patient_index in range(5)
+                ]
             approvals_path = root / "approvals.json"
             approvals_path.write_text(json.dumps(approvals), encoding="utf-8")
             output_dir = root / "artifacts"
@@ -547,6 +817,14 @@ class AuditDatasetTests(unittest.TestCase):
             self.assertTrue((output_dir / "event-windows.csv").is_file())
             self.assertTrue((output_dir / "model.json").is_file())
             self.assertTrue((output_dir / "metrics.json").is_file())
+            model = json.loads((output_dir / "model.json").read_text(encoding="utf-8"))
+            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                model["models"]["feature_logistic_regression"]["model_type"],
+                "per_label_logistic_regression",
+            )
+            self.assertIn("feature_logistic_regression", metrics)
+            self.assertIn("test", metrics["feature_logistic_regression"])
             split = json.loads((output_dir / "patient-split.json").read_text(encoding="utf-8"))
             self.assertFalse(set(split["train"]) & set(split["validation"]))
             self.assertFalse(set(split["train"]) & set(split["test"]))
@@ -802,6 +1080,9 @@ class AuditDatasetTests(unittest.TestCase):
         self.assertEqual(stages["extract_features"], "executed")
         self.assertEqual(len(commands), 2)
         self.assertTrue(all("--sobrescribir" in command for command in commands))
+        self.assertTrue(
+            all(command[command.index("--raiz") + 1] == str(root / "dataset") for command in commands)
+        )
 
     def test_pose_frame_timestamps_map_one_based_frame_names_to_session_clock(self):
         self.assertEqual(frame_timestamp_seconds(Path("S001_000001.jpg"), 0, 1), 0)
@@ -878,6 +1159,18 @@ class AuditDatasetTests(unittest.TestCase):
         self.assertEqual(len(calls["artifacts"]), 1)
         flattened = flatten_metrics({"test": {"micro_f1": 0.25}})
         self.assertEqual(flattened, {"test_micro_f1": 0.25})
+        model_metrics = flatten_metrics({
+            "feature_logistic_regression": {
+                "test": {"micro_f1": 0.75, "exact_match_accuracy": 0.5},
+            },
+        })
+        self.assertEqual(
+            model_metrics,
+            {
+                "feature_logistic_regression_test_micro_f1": 0.75,
+                "feature_logistic_regression_test_exact_match_accuracy": 0.5,
+            },
+        )
 
     def test_pipeline_graph_writes_svg_and_mermaid_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:

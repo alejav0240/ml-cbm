@@ -13,6 +13,7 @@ from typing import Any
 
 from create_window_index import write_window_index
 from demuca_estimates import write_demuca_estimates
+from demuca_draft import write_demuca_draft
 from media import (
     run_existing_extraction,
     segment_and_synchronize,
@@ -225,6 +226,10 @@ def process_session(
         if demuca_source_path.is_file()
         else None
     )
+    demuca_draft = None if demuca_estimates is not None else write_demuca_draft(
+        session_dir, overwrite=overwrite
+    )
+    demuca_draft_path = session_dir / "processed" / "features" / "demuca_draft.json"
     multimodal_manifest = synchronize_pose_with_segments(
         segments,
         pose_result,
@@ -273,6 +278,9 @@ def process_session(
         "demuca_estimates_path": (
             str(demuca_estimates_path.relative_to(session_dir)) if demuca_estimates else None
         ),
+        "demuca_draft_path": (
+            str(demuca_draft_path.relative_to(session_dir)) if demuca_draft else None
+        ),
         "derived_artifacts": {
             "stable_window_index": {
                 "path": "processed/windows/windows.json",
@@ -316,6 +324,16 @@ def process_session(
                     "calibration_status": "not_calibrated",
                 }
                 if demuca_estimates is not None
+                else None
+            ),
+            "demuca_draft": (
+                {
+                    "path": str(demuca_draft_path.relative_to(session_dir)),
+                    "training_authorized": False,
+                    "ground_truth": False,
+                    "review_required": True,
+                }
+                if demuca_draft is not None
                 else None
             ),
             "multimodal_manifest": {
