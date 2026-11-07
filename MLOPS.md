@@ -56,6 +56,11 @@ python -m mlops.cli deploy \
 python -m mlops.cli rollback \
   --registry ml/artifacts/registry.json \
   --out-dir ml/artifacts/production
+
+python -m mlops.cli register-mlflow \
+  --registry ml/artifacts/registry.json \
+  --version v20261023-01 \
+  --registered-model demuca-event-mvp
 ```
 
 `deploy` solo activa versiones con estado `production`. Copia el snapshot
@@ -67,6 +72,35 @@ artefacto legado `ml/artifacts/model.json`.
 `rollback` restaura la versión previamente desplegada, actualiza los estados
 del registro y no modifica los artefactos originales ni los snapshots del
 registro. Se puede indicar una versión concreta con `--version`.
+
+`register-mlflow` es un puente opcional: crea una versión en MLflow Model
+Registry usando el `mlflow_run_id` y el artefacto ya auditado por el registro
+local. Si MLflow no está disponible o la ejecución no tiene `mlflow_run_id`, la
+operación se bloquea y no modifica el registro local. La activación real sigue
+requiriendo `deploy`, que valida el snapshot y su SHA-256.
+
+## Servicio de inferencia
+
+El artefacto desplegado puede exponerse mediante el servicio HTTP autónomo:
+
+```bash
+ML_SERVICE_API_KEY=local-secret \
+python ml/service.py --host 127.0.0.1 --port 8010
+```
+
+Endpoints públicos de operación:
+
+- `GET /health` — proceso vivo.
+- `GET /ready` — modelo autorizado cargado y versión activa.
+- `GET /version` — versión y SHA-256 del modelo.
+- `GET /metrics` — contadores de solicitudes, predicciones y errores.
+- `POST /predict` — requiere `X-ML-Service-Key` cuando se configura una clave.
+
+`/predict` recibe únicamente filas de características y rechaza
+`patient_id`, `session_id` y `participant_id`. En `APP_ENV=production` la
+variable `ML_SERVICE_API_KEY` es obligatoria. El servicio no recibe vídeo ni
+datos clínicos: la extracción multimedia y la revisión humana siguen siendo
+responsabilidades separadas del pipeline.
 
 ## Comprobación de deriva
 

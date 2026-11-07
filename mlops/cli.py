@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .deriva import DEFAULT_FEATURE_COLUMNS, analizar_deriva, escribir_reporte_deriva
+from .mlflow_registry import registrar_version_mlflow
 from .registro import (
     ErrorRegistroModelo,
     desplegar_candidato,
@@ -35,6 +36,11 @@ def main() -> int:
     rollback.add_argument("--registry", type=Path, required=True)
     rollback.add_argument("--out-dir", type=Path, required=True)
     rollback.add_argument("--version")
+    mlflow_register = subparsers.add_parser("register-mlflow", help="mirror a promoted version into MLflow Model Registry")
+    mlflow_register.add_argument("--registry", type=Path, required=True)
+    mlflow_register.add_argument("--version", required=True)
+    mlflow_register.add_argument("--registered-model", required=True)
+    mlflow_register.add_argument("--tracking-uri")
     drift = subparsers.add_parser("drift", help="compare reference and candidate feature CSVs")
     drift.add_argument("--reference", type=Path, required=True)
     drift.add_argument("--candidate", type=Path, required=True)
@@ -52,6 +58,13 @@ def main() -> int:
             result = desplegar_candidato(args.registry, args.version, args.out_dir)
         elif args.command == "rollback":
             result = revertir_despliegue(args.registry, args.out_dir, args.version)
+        elif args.command == "register-mlflow":
+            result = registrar_version_mlflow(
+                args.registry,
+                args.version,
+                args.registered_model,
+                tracking_uri=args.tracking_uri,
+            )
         else:
             result = analizar_deriva(
                 args.reference,
