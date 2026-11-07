@@ -87,8 +87,12 @@ def predict_session(
             project_root = session_dir.parents[3]
         except IndexError:
             project_root = None
-        default_model = project_root / "ml" / "artifacts" / "model.json" if project_root else None
-        model_path = default_model if default_model and default_model.is_file() else None
+        production_model = project_root / "ml" / "artifacts" / "production" / "model.json" if project_root else None
+        legacy_model = project_root / "ml" / "artifacts" / "model.json" if project_root else None
+        model_path = next(
+            (candidate for candidate in (production_model, legacy_model) if candidate and candidate.is_file()),
+            None,
+        )
     if model_path is None:
         return {"status": "unavailable", "reason": "authorized_model_not_configured", "windows": []}
     if not model_path.is_file():

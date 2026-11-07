@@ -7,7 +7,13 @@ import json
 from pathlib import Path
 
 from .deriva import DEFAULT_FEATURE_COLUMNS, analizar_deriva, escribir_reporte_deriva
-from .registro import ErrorRegistroModelo, promover_candidato, registrar_candidato
+from .registro import (
+    ErrorRegistroModelo,
+    desplegar_candidato,
+    promover_candidato,
+    registrar_candidato,
+    revertir_despliegue,
+)
 
 
 def main() -> int:
@@ -21,6 +27,14 @@ def main() -> int:
     promote.add_argument("--registry", type=Path, required=True)
     promote.add_argument("--version", required=True)
     promote.add_argument("--min-micro-f1", type=float, default=0.0)
+    deploy = subparsers.add_parser("deploy", help="activate a promoted model atomically")
+    deploy.add_argument("--registry", type=Path, required=True)
+    deploy.add_argument("--version", required=True)
+    deploy.add_argument("--out-dir", type=Path, required=True)
+    rollback = subparsers.add_parser("rollback", help="restore the previous deployment")
+    rollback.add_argument("--registry", type=Path, required=True)
+    rollback.add_argument("--out-dir", type=Path, required=True)
+    rollback.add_argument("--version")
     drift = subparsers.add_parser("drift", help="compare reference and candidate feature CSVs")
     drift.add_argument("--reference", type=Path, required=True)
     drift.add_argument("--candidate", type=Path, required=True)
@@ -34,6 +48,10 @@ def main() -> int:
             result = registrar_candidato(args.artifacts_dir, args.registry, version=args.version)
         elif args.command == "promote":
             result = promover_candidato(args.registry, args.version, min_micro_f1=args.min_micro_f1)
+        elif args.command == "deploy":
+            result = desplegar_candidato(args.registry, args.version, args.out_dir)
+        elif args.command == "rollback":
+            result = revertir_despliegue(args.registry, args.out_dir, args.version)
         else:
             result = analizar_deriva(
                 args.reference,

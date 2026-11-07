@@ -3,7 +3,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from mlops.registro import ErrorRegistroModelo, promover_candidato, registrar_candidato
+from mlops.registro import (
+    ErrorRegistroModelo,
+    desplegar_candidato,
+    promover_candidato,
+    registrar_candidato,
+    revertir_despliegue,
+)
 
 
 class RegistroMLOpsTests(unittest.TestCase):
@@ -16,6 +22,7 @@ class RegistroMLOpsTests(unittest.TestCase):
         (self.artifacts / "model.json").write_text("{\"model\": true}\n", encoding="utf-8")
         (self.artifacts / "metrics.json").write_text(json.dumps({"feature_logistic_regression": {"test": {"micro_f1": 0.81, "exact_match_accuracy": 0.4}}}), encoding="utf-8")
         self.registry = self.root / "registry.json"
+        self.deployment = self.root / "production"
 
     def tearDown(self):
         self.temp.cleanup()
@@ -46,6 +53,45 @@ class RegistroMLOpsTests(unittest.TestCase):
         registrar_candidato(self.artifacts, self.registry, version="v1")
         with self.assertRaisesRegex(ErrorRegistroModelo, "metric_gate_failed"):
             promover_candidato(self.registry, "v1", min_micro_f1=0.9)
+
+    def test_despliega_solo_modelo_production_con_manifest(self):
+        registrar_candidato(self.artifacts, self.registry, version="v1")
+        with self.assertRaisesRegex(ErrorRegistroModelo, "model_is_not_production"):
+            desplegar_candidato(self.registry, "v1", self.deployment)
+
+        promover_candidato(self.registry, "v1", min_micro_f1=0.8)
+        deployed = desplegar_candidato(self.registry, "v1", self.deployment)
+
+        self.assertEqual(deployed["version"], "v1")
+        self.assertEqual(json.loads((self.deployment / "model.json").read_text())["model"], True)
+        manifest = json.loads((self.deployment / "deployment.json").read_text())
+        self.assertEqual(manifest["version"], "v1")
+        self.assertEqual(len(manifest["model_sha256"]), 64)
+
+    def test_despliegue_usa_snapshot_inmutable_si_cambia_la_fuente(self):
+        registrar_candidato(self.artifacts, self.registry, version="v1")
+        promover_candidato(self.registry, "v1")
+        self.artifacts.joinpath("model.json").write_text('{"model": "changed"}\n', encoding="utf-8")
+
+        desplegar_candidato(self.registry, "v1", self.deployment)
+        self.assertEqual(json.loads((self.deployment / "model.json").read_text())["model"], True)
+
+    def test_revertir_despliegue_restaura_version_anterior(self):
+        registrar_candidato(self.artifacts, self.registry, version="v1")
+        promover_candidato(self.registry, "v1")
+        desplegar_candidato(self.registry, "v1", self.deployment)
+
+        self.artifacts.joinpath("model.json").write_text('{"model": "v2"}\n', encoding="utf-8")
+        registrar_candidato(self.artifacts, self.registry, version="v2")
+        promover_candidato(self.registry, "v2")
+        desplegar_candidato(self.registry, "v2", self.deployment)
+
+        reverted = revertir_despliegue(self.registry, self.deployment)
+
+        self.assertEqual(reverted["version"], "v1")
+        self.assertEqual(json.loads((self.deployment / "model.json").read_text())["model"], True)
+        registry = json.loads(self.registry.read_text())
+        self.assertEqual(registry["deployment"]["version"], "v1")
 
 
 if __name__ == "__main__":

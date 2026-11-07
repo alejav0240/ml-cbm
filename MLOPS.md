@@ -16,6 +16,10 @@ registry.json (candidate + SHA-256)
 mlops/cli.py promote --min-micro-f1 0.70
   ↓
 production_version
+  ↓
+mlops/cli.py deploy
+  ↓
+artifacts/production/model.json + deployment.json
 ```
 
 ## MLflow
@@ -43,7 +47,26 @@ python -m mlops.cli promote \
   --registry ml/artifacts/registry.json \
   --version v20261023-01 \
   --min-micro-f1 0.70
+
+python -m mlops.cli deploy \
+  --registry ml/artifacts/registry.json \
+  --version v20261023-01 \
+  --out-dir ml/artifacts/production
+
+python -m mlops.cli rollback \
+  --registry ml/artifacts/registry.json \
+  --out-dir ml/artifacts/production
 ```
+
+`deploy` solo activa versiones con estado `production`. Copia el snapshot
+inmutable del modelo de forma atómica y escribe `deployment.json` con versión,
+hash, origen y `mlflow_run_id`. El predictor de sesiones prioriza
+`ml/artifacts/production/model.json` y conserva como fallback explícito el
+artefacto legado `ml/artifacts/model.json`.
+
+`rollback` restaura la versión previamente desplegada, actualiza los estados
+del registro y no modifica los artefactos originales ni los snapshots del
+registro. Se puede indicar una versión concreta con `--version`.
 
 ## Comprobación de deriva
 
