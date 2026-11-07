@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from models import MultilabelLogisticModel
-from service import InferenceService, ServiceConfigurationError
+from service import InferenceService, RequestHandler, ServiceConfigurationError
 
 
 def feature_row(value: float, label: int = 0) -> dict[str, float | int]:
@@ -62,6 +62,20 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertNotEqual(digest, "bad")
         with self.assertRaisesRegex(ServiceConfigurationError, "production_model_hash_mismatch"):
             InferenceService(self.model_path)
+
+    def test_request_handler_requires_key(self):
+        service = InferenceService(self.model_path, api_key="secret")
+        handler = object.__new__(RequestHandler)
+        handler.service = service
+
+        class Headers(dict):
+            def get(self, key, default=None):
+                return super().get(key, default)
+
+        handler.headers = Headers()
+        self.assertFalse(handler._authorized())
+        handler.headers["X-ML-Service-Key"] = "secret"
+        self.assertTrue(handler._authorized())
 
 
 if __name__ == "__main__":
