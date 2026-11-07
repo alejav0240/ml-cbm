@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from models import MultilabelLogisticModel
 from phase2_inference import predict_session
@@ -39,6 +40,38 @@ class Phase2InferenceTests(unittest.TestCase):
             result = predict_session(session, model_path)
             self.assertEqual(result["status"], "provisional")
             self.assertEqual(result["windows"][0]["predictions"]["audio__SILENCIO"], 1)
+
+    def test_remote_service_receives_features_without_identifiers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = Path(directory) / "S001"
+            features = session / "processed" / "features"
+            features.mkdir(parents=True)
+            (session / "metadata").mkdir()
+            (session / "metadata" / "session.json").write_text(json.dumps({"technical": {"duration_seconds": 5}}))
+            payload = {"timestamps": [1, 2, 3], "rms_energy": [1, 1, 1], "zero_crossing_rate": [0, 0, 0]}
+            (features / "audio_features.json").write_text(json.dumps(payload))
+            (features / "visual_motion.json").write_text(json.dumps({"timestamps": [1, 2, 3], "motion_intensity": [1, 1, 1]}))
+
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_):
+                    return False
+
+                def read(self):
+                    return json.dumps({
+                        "model_version": "v-remote",
+                        "results": [{"index": 0, "prediction": {"event": 1}, "probability": {"event": 0.9}}],
+                    }).encode()
+
+            with patch("phase2_inference.urlopen", return_value=Response()) as request:
+                result = predict_session(session, None, inference_url="http://ml:8010", inference_api_key="secret")
+
+            sent = json.loads(request.call_args.args[0].data.decode())
+            self.assertNotIn("session_id", sent["rows"][0])
+            self.assertEqual(result["model_version"], "v-remote")
+            self.assertEqual(result["windows"][0]["predictions"]["event"], 1)
 
 
 if __name__ == "__main__":

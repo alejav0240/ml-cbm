@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from models import FEATURE_COLUMNS, MultilabelLogisticModel
 from multimodal_features import derived_multimodal_features
@@ -75,14 +78,78 @@ def build_feature_rows(session_dir: Path, window_seconds: float) -> list[dict[st
     return rows
 
 
+def _predict_remote(
+    rows: list[dict[str, Any]],
+    *,
+    inference_url: str,
+    api_key: str | None,
+    timeout_seconds: float = 30.0,
+) -> dict[str, Any]:
+    safe_rows = [
+        {
+            key: value
+            for key, value in row.items()
+            if key not in {"session_id", "window_id", "patient_id", "participant_id"}
+        }
+        for row in rows
+    ]
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-ML-Service-Key"] = api_key
+    request = Request(
+        inference_url.rstrip("/") + "/predict",
+        data=json.dumps({"rows": safe_rows}).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError) as error:
+        return {"status": "unavailable", "reason": f"remote_inference_failed:{error}", "windows": []}
+    results = payload.get("results") if isinstance(payload, dict) else None
+    version = payload.get("model_version") if isinstance(payload, dict) else None
+    if (
+        not isinstance(results, list)
+        or len(results) != len(rows)
+        or not isinstance(version, str)
+        or any(not isinstance(item, dict) or item.get("index") != index for index, item in enumerate(results))
+    ):
+        return {"status": "unavailable", "reason": "remote_inference_contract_invalid", "windows": []}
+    return {
+        "status": "provisional",
+        "model_type": "remote_ml_service",
+        "model_version": version,
+        "model_path": inference_url,
+        "training_authorized": True,
+        "demo_only": False,
+        "ground_truth": False,
+        "review_required": True,
+        "windows": [
+            {
+                "window_id": row["window_id"],
+                "start_seconds": row["start_seconds"],
+                "end_seconds": row["end_seconds"],
+                "predictions": item["prediction"],
+                "probabilities": item.get("probability"),
+            }
+            for row, item in zip(rows, results)
+        ],
+    }
+
+
 def predict_session(
     session_dir: Path,
     model_path: Path | None,
     *,
     window_seconds: float = 5.0,
     allow_experimental_demo: bool = False,
+    inference_url: str | None = None,
+    inference_api_key: str | None = None,
 ) -> dict[str, Any]:
-    if model_path is None:
+    inference_url = inference_url or os.environ.get("ML_INFERENCE_URL")
+    inference_api_key = inference_api_key or os.environ.get("ML_INFERENCE_API_KEY")
+    if not inference_url and model_path is None:
         try:
             project_root = session_dir.parents[3]
         except IndexError:
@@ -93,16 +160,22 @@ def predict_session(
             (candidate for candidate in (production_model, legacy_model) if candidate and candidate.is_file()),
             None,
         )
-    if model_path is None:
+    if not inference_url and model_path is None:
         return {"status": "unavailable", "reason": "authorized_model_not_configured", "windows": []}
+    rows = build_feature_rows(session_dir, window_seconds)
+    if not rows:
+        return {"status": "unavailable", "reason": "no_complete_feature_windows", "windows": []}
+    if inference_url:
+        return _predict_remote(
+            rows,
+            inference_url=inference_url,
+            api_key=inference_api_key,
+        )
     if not model_path.is_file():
         raise FileNotFoundError(f"prediction model not found: {model_path}")
     model, model_type, training_authorized = _load_authorized_model(
         model_path, allow_experimental_demo=allow_experimental_demo
     )
-    rows = build_feature_rows(session_dir, window_seconds)
-    if not rows:
-        return {"status": "unavailable", "reason": "no_complete_feature_windows", "windows": []}
     model_features = tuple(getattr(model, "feature_columns", FEATURE_COLUMNS))
     if any(column not in rows[0] for column in model_features):
         return {

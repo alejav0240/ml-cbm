@@ -17,7 +17,7 @@ def registrar_version_mlflow(
 ) -> dict[str, Any]:
     try:
         import mlflow
-        from mlflow import MlflowClient
+        from mlflow_model import AuthorizedJsonModel
     except ImportError as error:
         raise ErrorRegistroModelo("mlflow_dependency_missing") from error
 
@@ -30,20 +30,24 @@ def registrar_version_mlflow(
         raise ErrorRegistroModelo("model_is_not_promoted")
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
-    client = MlflowClient(tracking_uri=tracking_uri)
-    try:
-        client.get_registered_model(registered_model_name)
-    except Exception:
-        client.create_registered_model(registered_model_name)
-    model_version = client.create_model_version(
-        name=registered_model_name,
-        source=f"runs:/{run_id}/model.json",
-        run_id=run_id,
-        tags={"local_registry_version": version, "model_sha256": candidate["deployment_artifact"]["sha256"]},
-    )
+    snapshot = Path(candidate["deployment_artifact"]["path"])
+    if not snapshot.is_file():
+        raise ErrorRegistroModelo("deployment_snapshot_missing")
+    project_root = Path(__file__).resolve().parents[1]
+    with mlflow.start_run(run_id=run_id):
+        model_info = mlflow.pyfunc.log_model(
+            name="authorized_model",
+            python_model=AuthorizedJsonModel(),
+            artifacts={"model_json": str(snapshot)},
+            code_paths=[str(project_root / "models.py"), str(project_root / "mlflow_model.py")],
+            pip_requirements=["mlflow>=3.1,<4", "scikit-learn>=1.9,<2", "pandas>=2.2,<3"],
+            registered_model_name=registered_model_name,
+        )
+    mlflow_version = str(model_info.registered_model_version or "")
     return {
         "registered_model_name": registered_model_name,
-        "mlflow_version": str(model_version.version),
+        "mlflow_version": mlflow_version,
         "local_registry_version": version,
         "mlflow_run_id": run_id,
+        "model_uri": model_info.model_uri,
     }

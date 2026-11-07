@@ -32,7 +32,8 @@ Branch: feat/multimodal-orchestration. Delivery: reviewable work-unit commits. T
 L1. User: "haz todo lo que prioridad alta"
 L2. Assumption accepted from prior exchange: use a separate ML inference service rather than loading ML dependencies into Django workers.
 L3. Implemented: `service.py` exposes authenticated prediction plus health, readiness, version, and metrics endpoints; production requires a deployment manifest and SHA-256 match.
-L4. Implemented: `.github/workflows/mlops.yml` validates compilation, MLOps registry/drift tests, inference tests, and CLI contract; the existing frontend workflow syntax error was corrected without touching its unrelated worktree changes.
-L5. Implemented: `register-mlflow` mirrors promoted local versions into MLflow Model Registry when the optional MLflow dependency and run ID are available; local deployment remains the hash-verified activation boundary.
+L4. Implemented: Django's existing subprocess pipeline can route prediction requests to `ML_INFERENCE_URL` after local feature extraction; identifiers are removed before the HTTP request and the local model remains the fallback when the variable is empty.
+L5. Implemented: `register-mlflow` logs an MLflow `pyfunc` model with `registered_model_name`; `MLFLOW_MODEL_URI` makes the inference service load that registered model natively.
+L6. Implemented: `.github/workflows/mlops.yml` validates compilation, MLOps registry/drift tests, inference tests, and CLI contract; the existing frontend workflow syntax error was corrected without touching its unrelated worktree changes.
 
 Risk: item 5 (deployment, CI/CD, authentication, and model-serving changes affect production behavior and environment configuration).

@@ -102,6 +102,22 @@ variable `ML_SERVICE_API_KEY` es obligatoria. El servicio no recibe vídeo ni
 datos clínicos: la extracción multimedia y la revisión humana siguen siendo
 responsabilidades separadas del pipeline.
 
+Para servir nativamente desde MLflow Model Registry, configure
+`MLFLOW_MODEL_URI`, por ejemplo `models:/demuca-event-mvp/1`. El servicio
+cargará el modelo `pyfunc` registrado en MLflow en lugar del archivo local:
+
+```bash
+MLFLOW_MODEL_URI=models:/demuca-event-mvp/1 \
+MLFLOW_MODEL_VERSION=v1 \
+ML_SERVICE_API_KEY=local-secret \
+python ml/service.py --port 8010
+```
+
+El wrapper `mlflow_model.py` reutiliza `MultilabelLogisticModel`, exige
+`training_authorized=true` y devuelve predicciones y probabilidades bajo el
+mismo contrato HTTP. El archivo local hash-verificado sigue disponible como
+fallback explícito cuando `MLFLOW_MODEL_URI` no está definido.
+
 ## Comprobación de deriva
 
 Antes de reentrenar, comparar un CSV de referencia con el nuevo conjunto de ventanas:

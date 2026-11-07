@@ -20,15 +20,47 @@ class ServiceConfigurationError(ValueError):
     """The production inference boundary is not safely configured."""
 
 
+class MlflowPredictor:
+    def __init__(self, model_uri: str) -> None:
+        try:
+            import mlflow
+            import pandas as pd
+        except ImportError as error:
+            raise ServiceConfigurationError("mlflow_serving_dependencies_missing") from error
+        self._pd = pd
+        self._model = mlflow.pyfunc.load_model(model_uri)
+        self.model_uri = model_uri
+
+    def predict(self, rows: list[dict[str, Any]]) -> tuple[list[dict[str, int]], list[dict[str, float]]]:
+        result = self._model.predict(self._pd.DataFrame(rows))
+        if not isinstance(result, list) or len(result) != len(rows):
+            raise ValueError("mlflow_model_prediction_contract_invalid")
+        predictions = [item.get("prediction") for item in result if isinstance(item, dict)]
+        probabilities = [item.get("probability") for item in result if isinstance(item, dict)]
+        if len(predictions) != len(rows) or len(probabilities) != len(rows):
+            raise ValueError("mlflow_model_prediction_contract_invalid")
+        return predictions, probabilities
+
+
 class InferenceService:
-    def __init__(self, model_path: Path, *, api_key: str | None = None) -> None:
-        self.model_path = model_path.resolve()
+    def __init__(self, model_path: Path | None = None, *, api_key: str | None = None, model_uri: str | None = None) -> None:
+        self.model_path = model_path.resolve() if model_path is not None else None
+        self.model_uri = model_uri
         self.api_key = api_key
         self._lock = threading.Lock()
         self.requests = 0
         self.predictions = 0
         self.errors = 0
-        self.model, self.version, self.model_sha256 = self._load_model()
+        if model_uri:
+            self.model = None
+            self.predictor = MlflowPredictor(model_uri)
+            self.version = os.environ.get("MLFLOW_MODEL_VERSION", model_uri)
+            self.model_sha256 = f"mlflow:{hashlib.sha256(model_uri.encode()).hexdigest()}"
+        else:
+            if self.model_path is None:
+                raise ServiceConfigurationError("production_model_not_configured")
+            self.predictor = None
+            self.model, self.version, self.model_sha256 = self._load_model()
 
     def _load_model(self) -> tuple[MultilabelLogisticModel, str, str]:
         if not self.model_path.is_file():
@@ -82,9 +114,15 @@ class InferenceService:
                 raise ValueError("row_must_be_object")
             if any(key in row for key in ("patient_id", "session_id", "participant_id")):
                 raise ValueError("patient_identifiers_not_allowed")
-            safe_rows.append({column: row.get(column) for column in self.model.feature_columns})
-        predictions = self.model.predict(safe_rows)
-        probabilities = self.model.predict_proba(safe_rows)
+            if self.predictor is not None:
+                safe_rows.append(row)
+            else:
+                safe_rows.append({column: row.get(column) for column in self.model.feature_columns})
+        if self.predictor is not None:
+            predictions, probabilities = self.predictor.predict(safe_rows)
+        else:
+            predictions = self.model.predict(safe_rows)
+            probabilities = self.model.predict_proba(safe_rows)
         with self._lock:
             self.predictions += len(rows)
         return {
@@ -168,7 +206,8 @@ def main() -> int:
     api_key = os.environ.get("ML_SERVICE_API_KEY")
     if os.environ.get("APP_ENV", "development") == "production" and not api_key:
         raise SystemExit("ML_SERVICE_API_KEY is required in production")
-    service = InferenceService(args.model, api_key=api_key)
+    model_uri = os.environ.get("MLFLOW_MODEL_URI")
+    service = InferenceService(args.model, api_key=api_key, model_uri=model_uri)
     server = build_server(args.host, args.port, service)
     print(json.dumps({"status": "ready", **service.version_info()}), flush=True)
     try:
