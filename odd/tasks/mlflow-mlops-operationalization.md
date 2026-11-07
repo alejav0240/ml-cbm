@@ -23,7 +23,7 @@ Rama: feat/multimodal-orchestration. Estrategia: cambios locales y verificables.
 - T1 — S1-S2 — inline: auditar y endurecer tracking/registro; estado: completo; commit: `72e0cb4`; evidencia: registro conserva pipeline_status y MLflow run ID cuando existe.
 - T2 — S1 — inline: agregar reporte reproducible de deriva y CLI; estado: completo; commit: `72e0cb4`; evidencia: `test_mlops_drift.py` pasa.
 - T3 — S1-S2 — inline: actualizar documentación y pruebas; estado: completo; commit: `72e0cb4`; evidencia: `MLOPS.md` documenta MLflow, registro, deriva y límites de privacidad; 7 pruebas enfocadas pasan.
-- T4 — S3 — inline: implementar activación atómica, rollback y conexión del modelo productivo con inferencia; estado: completo; commit: `6063bae`; evidencia: 7 pruebas de registro/despliegue pasan, `phase2_inference` prioriza el artefacto productivo y la verificación independiente confirma el gate de estado, snapshot, hash, rollback y CLI.
+- T4 — S3 — inline: implementar activación atómica, rollback y conexión del modelo productivo con inferencia; estado: completo; commit: `ef41276`; evidencia: 7 pruebas de registro/despliegue pasan, `phase2_inference` prioriza el artefacto productivo y la verificación independiente confirma el gate de estado, snapshot, hash, rollback y CLI.
 
 ## Log
 
