@@ -21,11 +21,11 @@ Branch: feat/multimodal-orchestration. Delivery: reviewable work-unit commits. T
 
 ## Tasks
 
-- T1 — S2-S4 — inline: define and test the production inference service contract; status: complete; commit: `a5f50ef`.
+- T1 — S2-S4 — inline: define and test the production inference service contract; status: complete; commits: `a5f50ef`, `cdb4c4c`.
 - T2 — S3 — inline: add CI workflow and reproducible MLOps checks; status: complete; commit: `a5f50ef`.
-- T3 — S4 — inline: align MLflow/local registry deployment evidence and drift gate; status: complete; commit: `a5f50ef`.
-- T4 — S5 — inline: harden service configuration and authentication; status: complete; commit: `a5f50ef`.
-- T5 — S1-S5 — inline: document runtime, rollback, monitoring, and operational limits; status: complete; commit: `a5f50ef`.
+- T3 — S4 — inline: align MLflow/local registry deployment evidence and drift gate; status: complete; commit: `cdb4c4c`.
+- T4 — S5 — inline: harden service configuration and authentication; status: complete; commits: `a5f50ef`, `cdb4c4c`.
+- T5 — S1-S5 — inline: document runtime, rollback, monitoring, and operational limits; status: complete; commits: `a5f50ef`, `cdb4c4c`.
 
 ## Log
 
