@@ -35,8 +35,8 @@ class MlflowPredictor:
         result = self._model.predict(self._pd.DataFrame(rows))
         if not isinstance(result, list) or len(result) != len(rows):
             raise ValueError("mlflow_model_prediction_contract_invalid")
-        predictions = [item.get("prediction") for item in result if isinstance(item, dict)]
-        probabilities = [item.get("probability") for item in result if isinstance(item, dict)]
+        predictions = [item["prediction"] for item in result if isinstance(item, dict) and "prediction" in item]
+        probabilities = [item["probability"] for item in result if isinstance(item, dict) and "probability" in item]
         if len(predictions) != len(rows) or len(probabilities) != len(rows):
             raise ValueError("mlflow_model_prediction_contract_invalid")
         return predictions, probabilities
@@ -51,6 +51,8 @@ class InferenceService:
         self.requests = 0
         self.predictions = 0
         self.errors = 0
+        self.model: MultilabelLogisticModel | None
+        self.predictor: MlflowPredictor | None
         if model_uri:
             self.model = None
             self.predictor = MlflowPredictor(model_uri)
@@ -60,22 +62,22 @@ class InferenceService:
             if self.model_path is None:
                 raise ServiceConfigurationError("production_model_not_configured")
             self.predictor = None
-            self.model, self.version, self.model_sha256 = self._load_model()
+            self.model, self.version, self.model_sha256 = self._load_model(self.model_path)
 
-    def _load_model(self) -> tuple[MultilabelLogisticModel, str, str]:
-        if not self.model_path.is_file():
+    def _load_model(self, model_path: Path) -> tuple[MultilabelLogisticModel, str, str]:
+        if not model_path.is_file():
             raise ServiceConfigurationError("production_model_not_found")
-        deployment_path = self.model_path.parent / "deployment.json"
+        deployment_path = model_path.parent / "deployment.json"
         if not deployment_path.is_file():
             raise ServiceConfigurationError("deployment_manifest_required")
         try:
             deployment = json.loads(deployment_path.read_text(encoding="utf-8"))
-            artifact = json.loads(self.model_path.read_text(encoding="utf-8"))
+            artifact = json.loads(model_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise ServiceConfigurationError("production_model_invalid_json") from error
         if artifact.get("training_authorized") is not True:
             raise ServiceConfigurationError("production_model_not_authorized")
-        digest = hashlib.sha256(self.model_path.read_bytes()).hexdigest()
+        digest = hashlib.sha256(model_path.read_bytes()).hexdigest()
         if deployment.get("model_sha256") != digest:
             raise ServiceConfigurationError("production_model_hash_mismatch")
         version = deployment.get("version")
@@ -117,10 +119,12 @@ class InferenceService:
             if self.predictor is not None:
                 safe_rows.append(row)
             else:
+                assert self.model is not None
                 safe_rows.append({column: row.get(column) for column in self.model.feature_columns})
         if self.predictor is not None:
             predictions, probabilities = self.predictor.predict(safe_rows)
         else:
+            assert self.model is not None
             predictions = self.model.predict(safe_rows)
             probabilities = self.model.predict_proba(safe_rows)
         with self._lock:

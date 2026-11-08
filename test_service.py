@@ -72,7 +72,7 @@ class InferenceServiceTests(unittest.TestCase):
             def get(self, key, default=None):
                 return super().get(key, default)
 
-        handler.headers = Headers()
+        setattr(handler, "headers", Headers())
         self.assertFalse(handler._authorized())
         handler.headers["X-ML-Service-Key"] = "secret"
         self.assertTrue(handler._authorized())

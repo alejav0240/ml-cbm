@@ -14,6 +14,7 @@ import joblib
 
 from phase2_models import FEATURE_COLUMNS, MultimodalLateFusionModel, MultiLabelTreeModel
 from run_pipeline import evaluate_row_predictions, split_by_patient
+from tracking import flatten_metrics, log_run
 
 
 def read_rows(path: Path) -> list[dict[str, Any]]:
@@ -49,6 +50,9 @@ def train_phase2(
     *,
     seed: int,
     experimental: bool,
+    tracking_uri: str | None = None,
+    experiment: str = "demuca-phase2-model-comparison",
+    no_mlflow: bool = False,
 ) -> dict[str, Any]:
     manifest = validate_manifest(dataset_path, experimental)
     rows = read_rows(dataset_path)
@@ -109,6 +113,27 @@ def train_phase2(
     (output_dir / "phase2_status.json").write_text(
         json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if not no_mlflow:
+        run_id = log_run(
+            experiment_name=experiment,
+            run_name="phase2-model-comparison",
+            params={"seed": seed, "experimental": experimental, "rows": len(rows)},
+            metrics=flatten_metrics(metrics),
+            tags={"pipeline": "phase2", "training_status": status["status"]},
+            artifacts=[
+                output_dir / "metrics.json",
+                output_dir / "phase2_status.json",
+                *output_dir.glob("*.joblib"),
+            ],
+            tracking_uri=tracking_uri,
+            dataset_path=dataset_path,
+            dataset_name="event-windows-phase2",
+            dataset_columns=feature_columns,
+        )
+        status["mlflow_run_id"] = run_id
+        (output_dir / "phase2_status.json").write_text(
+            json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     return status
 
 
@@ -123,6 +148,9 @@ def main() -> int:
         action="store_true",
         help="Allow an isolated run when the dataset manifest is not training-authorized.",
     )
+    parser.add_argument("--tracking-uri")
+    parser.add_argument("--experiment", default="demuca-phase2-model-comparison")
+    parser.add_argument("--no-mlflow", action="store_true")
     args = parser.parse_args()
     status = train_phase2(
         args.dataset,
@@ -130,6 +158,9 @@ def main() -> int:
         args.out_dir,
         seed=args.seed,
         experimental=args.experimental,
+        tracking_uri=args.tracking_uri,
+        experiment=args.experiment,
+        no_mlflow=args.no_mlflow,
     )
     print(json.dumps(status, indent=2, ensure_ascii=False))
     return 0

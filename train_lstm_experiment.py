@@ -13,6 +13,7 @@ from typing import Any
 from lstm_fusion import LSTMFusionModel
 from run_pipeline import evaluate_row_predictions, split_by_patient
 from train_phase2 import load_task, read_rows, validate_manifest
+from tracking import flatten_metrics, log_run
 
 
 def _sequences(
@@ -81,6 +82,9 @@ def train_lstm(
     sequence_length: int,
     epochs: int,
     experimental: bool,
+    tracking_uri: str | None = None,
+    experiment: str = "demuca-lstm-experiment",
+    no_mlflow: bool = False,
 ) -> dict[str, Any]:
     if not experimental:
         raise ValueError("lstm_experiment_requires_experimental_flag")
@@ -168,6 +172,32 @@ def train_lstm(
     (output_dir / "lstm_status.json").write_text(
         json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if not no_mlflow:
+        run_id = log_run(
+            experiment_name=experiment,
+            run_name="lstm-experiment",
+            params={
+                "seed": seed,
+                "sequence_length": sequence_length,
+                "epochs": epochs,
+                "experimental": experimental,
+            },
+            metrics=flatten_metrics({"lstm": metrics}),
+            tags={"pipeline": "lstm", "training_status": status["status"]},
+            artifacts=[
+                output_dir / "metrics.json",
+                output_dir / "lstm_status.json",
+                output_dir / "lstm_fusion.pt",
+            ],
+            tracking_uri=tracking_uri,
+            dataset_path=dataset_path,
+            dataset_name="event-windows-lstm",
+            dataset_columns=feature_columns,
+        )
+        status["mlflow_run_id"] = run_id
+        (output_dir / "lstm_status.json").write_text(
+            json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     return status
 
 
@@ -180,11 +210,17 @@ def main() -> int:
     parser.add_argument("--sequence-length", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--experimental", action="store_true")
+    parser.add_argument("--tracking-uri")
+    parser.add_argument("--experiment", default="demuca-lstm-experiment")
+    parser.add_argument("--no-mlflow", action="store_true")
     args = parser.parse_args()
     status = train_lstm(
         args.dataset, args.task, args.out_dir, seed=args.seed,
         sequence_length=args.sequence_length, epochs=args.epochs,
         experimental=args.experimental,
+        tracking_uri=args.tracking_uri,
+        experiment=args.experiment,
+        no_mlflow=args.no_mlflow,
     )
     print(json.dumps(status, indent=2, ensure_ascii=False))
     return 0

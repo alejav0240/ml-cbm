@@ -352,6 +352,9 @@ def main() -> int:
                     *graph_artifacts,
                 ],
                 tracking_uri=args.tracking_uri,
+                dataset_path=dataset_path,
+                dataset_name="event-windows",
+                dataset_columns=tuple(task.get("features", FEATURE_COLUMNS)),
             )
             status["mlflow_run_id"] = run_id
             (args.out_dir / "pipeline_status.json").write_text(

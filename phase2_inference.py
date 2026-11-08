@@ -171,6 +171,7 @@ def predict_session(
             inference_url=inference_url,
             api_key=inference_api_key,
         )
+    assert model_path is not None
     if not model_path.is_file():
         raise FileNotFoundError(f"prediction model not found: {model_path}")
     model, model_type, training_authorized = _load_authorized_model(

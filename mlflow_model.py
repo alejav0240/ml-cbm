@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from mlflow.pyfunc.model import PythonModel
 
 from models import MultilabelLogisticModel
 
 
-class AuthorizedJsonModel:
+class AuthorizedJsonModel(PythonModel):
     """Serve the same feature model used by the local inference path."""
 
     def load_context(self, context: Any) -> None:
@@ -21,7 +22,12 @@ class AuthorizedJsonModel:
         model_data = artifact.get("models", {}).get("feature_logistic_regression")
         self.model = MultilabelLogisticModel.from_dict(model_data)
 
-    def predict(self, context: Any, model_input: pd.DataFrame) -> list[dict[str, Any]]:
+    def predict(
+        self,
+        context: Any,
+        model_input: pd.DataFrame,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         rows = model_input.to_dict(orient="records")
         predictions = self.model.predict(rows)
         probabilities = self.model.predict_proba(rows)

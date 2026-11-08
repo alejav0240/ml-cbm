@@ -26,6 +26,12 @@ artifacts/production/model.json + deployment.json
 
 La ejecución normal registra en el experimento `demuca-event-mvp` parámetros, métricas agregadas por partición y etiqueta, y los artefactos seguros `pipeline_status.json`, `metrics.json`, `model.json` y el grafo del pipeline.
 
+Las comparaciones de fase 2 y el experimento LSTM también registran sus métricas,
+parámetros y artefactos cuando se ejecutan. Cada uno permite cambiar el experimento
+con `--experiment`, el servidor con `--tracking-uri` o desactivar el tracking de
+forma explícita con `--no-mlflow`; los modelos LSTM siguen marcados como
+experimentales y no autorizados para producción.
+
 Por defecto usa `sqlite:///ml/mlflow.db` y `ml/mlartifacts/`. Para abrir la interfaz local:
 
 ```bash
@@ -34,6 +40,11 @@ mlflow server --backend-store-uri sqlite:///ml/mlflow.db \
 ```
 
 El tracking es opcional (`--no-mlflow`) y puede apuntar a un servidor autorizado con `--tracking-uri` o `MLFLOW_TRACKING_URI`. No se registran grabaciones, landmarks, identificadores de pacientes ni CSV a nivel paciente.
+
+Cada entrenamiento autorizado o experimental también registra el dataset como
+`Dataset Input` de MLflow usando únicamente las columnas de características,
+junto con su SHA-256, cantidad de filas y columnas. El CSV completo no se copia
+como artefacto de MLflow.
 
 ## Comandos
 

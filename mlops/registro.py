@@ -73,7 +73,8 @@ def _modelo_fuente_verificado(candidate: dict[str, Any]) -> Path:
     if not isinstance(model_artifact, dict):
         source_artifacts = candidate.get("source_artifacts")
         model_artifact = source_artifacts.get("model") if isinstance(source_artifacts, dict) else None
-    source_path = Path(model_artifact.get("path")) if isinstance(model_artifact, dict) and model_artifact.get("path") else None
+    raw_path = model_artifact.get("path") if isinstance(model_artifact, dict) else None
+    source_path = Path(raw_path) if isinstance(raw_path, str) and raw_path else None
     expected_hash = model_artifact.get("sha256") if isinstance(model_artifact, dict) else None
     if source_path is None or not source_path.is_file() or not isinstance(expected_hash, str):
         raise ErrorRegistroModelo("model_source_artifact_missing")

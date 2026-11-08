@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,9 @@ def log_run(
     tags: dict[str, str],
     artifacts: list[Path],
     tracking_uri: str | None = None,
+    dataset_path: Path | None = None,
+    dataset_name: str | None = None,
+    dataset_columns: tuple[str, ...] = (),
 ) -> str:
     """Log run metadata and explicitly selected, non-sensitive artifacts."""
     try:
@@ -58,6 +62,26 @@ def log_run(
             mlflow.log_metrics(safe_metrics)
         if tags:
             mlflow.set_tags(tags)
+        if dataset_path is not None and dataset_path.is_file():
+            import pandas as pd
+
+            dataset_frame = pd.read_csv(
+                dataset_path,
+                usecols=list(dataset_columns) if dataset_columns else None,
+            )
+            dataset = mlflow.data.from_pandas(
+                dataset_frame,
+                source=str(dataset_path),
+                name=dataset_name or dataset_path.stem,
+            )
+            mlflow.log_input(dataset, context="training")
+            mlflow.set_tags(
+                {
+                    "dataset_sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+                    "dataset_rows": str(len(dataset_frame)),
+                    "dataset_columns": ",".join(dataset_frame.columns),
+                }
+            )
         for artifact in artifacts:
             if artifact.is_file():
                 mlflow.log_artifact(str(artifact))
