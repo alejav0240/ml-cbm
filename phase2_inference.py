@@ -19,6 +19,17 @@ def _window_values(payload: dict[str, Any], timestamp_key: str, value_key: str, 
     return [value for timestamp, value in zip(timestamps, values) if start <= timestamp < end]
 
 
+def _read_feature_payload(features_dir: Path, *names: str) -> dict[str, Any]:
+    """Read the current artifact name while retaining legacy compatibility."""
+    for name in names:
+        path = features_dir / name
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+    raise FileNotFoundError(
+        "feature artifact not found: " + ", ".join(str(features_dir / name) for name in names)
+    )
+
+
 def _load_authorized_model(
     model_path: Path, *, allow_experimental_demo: bool = False
 ) -> tuple[Any, str, bool]:
@@ -49,8 +60,12 @@ def _load_authorized_model(
 
 def build_feature_rows(session_dir: Path, window_seconds: float) -> list[dict[str, Any]]:
     features_dir = session_dir / "processed" / "features"
-    audio = json.loads((features_dir / "audio_features.json").read_text(encoding="utf-8"))
-    visual = json.loads((features_dir / "visual_motion.json").read_text(encoding="utf-8"))
+    audio = _read_feature_payload(
+        features_dir, "acoustic_features.json", "audio_features.json"
+    )
+    visual = _read_feature_payload(
+        features_dir, "movement_interaction.json", "visual_motion.json"
+    )
     duration = float(json.loads((session_dir / "metadata" / "session.json").read_text(encoding="utf-8"))["technical"]["duration_seconds"])
     rows: list[dict[str, Any]] = []
     derived = derived_multimodal_features(session_dir, window_seconds=window_seconds)
