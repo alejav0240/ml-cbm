@@ -9,7 +9,7 @@
 - POST /v1/runs
 - GET /v1/runs/{run_id}
 
-All endpoints except health/readiness require X-ML-Service-Key when ML_ORCHESTRATOR_API_KEY is configured. Video files must be inside ML_MEDIA_ROOT; this prevents arbitrary filesystem reads.
+All endpoints except health/readiness require X-ML-Service-Key when ML_ORCHESTRATOR_API_KEY is configured. Local video files must be inside ML_MEDIA_ROOT. HTTPS video URLs are downloaded into a temporary file with ML_MAX_DOWNLOAD_BYTES protection and deleted after processing.
 
 ## Example request
 
