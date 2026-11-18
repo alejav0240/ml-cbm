@@ -12,10 +12,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from audit_dataset import PROJECT_ROOT, read_json
+from dataset_source import resolve_sessions_dir
 from prepare_dataset import sha256_file
 
 
-DEFAULT_SESSIONS_DIR = PROJECT_ROOT / "dataset" / "dataset" / "sessions"
+DEFAULT_SESSIONS_DIR = resolve_sessions_dir()
 DEFAULT_TASK_CONFIG = PROJECT_ROOT / "ml" / "task.json"
 REQUIRED_SESSION_SOURCES = {
     "metadata/session.json",
