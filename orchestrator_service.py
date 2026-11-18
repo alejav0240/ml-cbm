@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import re
+import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from analyze_video import analyze_video
@@ -104,20 +106,27 @@ class Orchestrator:
         session_id = payload.get("session_id")
         if not isinstance(session_id, str) or not SESSION_ID_PATTERN.fullmatch(session_id):
             raise ValueError("invalid_session_id")
-        video_path_value = payload.get("video_path")
+        video_path_value = payload.get("video_path") or payload.get("video_uri")
         if not isinstance(video_path_value, str) or not video_path_value:
             raise ValueError("video_path_required")
-        video_path = Path(video_path_value).expanduser().resolve()
-        try:
-            video_path.relative_to(self.media_root)
-        except ValueError as error:
-            raise ValueError("video_path_outside_media_root") from error
-        if not video_path.is_file():
-            raise ValueError("video_file_not_found")
+        parsed = urlparse.urlparse(video_path_value)
+        if parsed.scheme in {"http", "https"}:
+            video_path = None
+            video_uri = video_path_value
+        else:
+            video_path = Path(video_path_value).expanduser().resolve()
+            try:
+                video_path.relative_to(self.media_root)
+            except ValueError as error:
+                raise ValueError("video_path_outside_media_root") from error
+            if not video_path.is_file():
+                raise ValueError("video_file_not_found")
+            video_uri = None
         return {
             **payload,
             "session_id": session_id,
             "video_path": video_path,
+            "video_uri": video_uri,
             "pose_model": _optional_path(payload.get("pose_model")),
             "skip_pose": bool(payload.get("skip_pose", True)),
         }
@@ -136,8 +145,9 @@ class Orchestrator:
 
     def _run(self, run_id: str, payload: dict[str, Any]) -> None:
         self.store.update(run_id, status="running")
+        temporary_path = None
         try:
-            video_path: Path = payload["video_path"]
+            video_path, temporary_path = self._materialize_video(payload)
             result = analyze_video(
                 video_path,
                 session_id=payload["session_id"],
@@ -155,9 +165,54 @@ class Orchestrator:
                 status="failed",
                 error={"code": type(error).__name__, "message": str(error)},
             )
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
         callback_url = payload.get("callback_url")
         if isinstance(callback_url, str) and callback_url:
             self._callback(callback_url, record)
+
+    def _materialize_video(self, payload: dict[str, Any]) -> tuple[Path, Path | None]:
+        local_path = payload.get("video_path")
+        if isinstance(local_path, Path):
+            return local_path, None
+
+        video_uri = payload.get("video_uri")
+        if not isinstance(video_uri, str):
+            raise ValueError("video_uri_required")
+        parsed = urlparse.urlparse(video_uri)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("unsupported_video_uri_scheme")
+
+        max_bytes = int(os.getenv("ML_MAX_DOWNLOAD_BYTES", str(2 * 1024 * 1024 * 1024)))
+        suffix = Path(parsed.path).suffix or ".bin"
+        self.media_root.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f"{payload['session_id']}-",
+            suffix=suffix,
+            dir=self.media_root,
+        )
+        temporary_path = Path(temporary_name)
+        total = 0
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                with urlrequest.urlopen(video_uri, timeout=60) as response:
+                    declared = response.headers.get("Content-Length")
+                    if declared and int(declared) > max_bytes:
+                        raise ValueError("video_download_too_large")
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise ValueError("video_download_too_large")
+                        output.write(chunk)
+            return temporary_path, temporary_path
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
+
 
     def _callback(self, callback_url: str, record: dict[str, Any]) -> None:
         body = json.dumps(record, ensure_ascii=False).encode("utf-8")
