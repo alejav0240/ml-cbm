@@ -156,6 +156,7 @@ class Orchestrator:
                 max_tail_trim_seconds=float(payload.get("max_tail_trim_seconds", 0.2)),
                 pose_model=payload.get("pose_model"),
                 skip_pose=payload.get("skip_pose", True),
+                allow_provisional_evidence=True,
             )
             result["source_sha256"] = _sha256(video_path)
             record = self.store.update(run_id, status="completed", result=result)

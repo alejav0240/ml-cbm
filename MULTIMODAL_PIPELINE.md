@@ -40,9 +40,16 @@ It runs the audio-capable stages by default; pose inference is opt-in with
 An authorized observable-event model can be applied with
 `--prediction-model ml/artifacts/model.json` (or an authorized phase-two
 `.joblib`). The response then includes `model_predictions` and writes
-`processed/features/model_predictions.json`. Without an authorized model the
-field reports `status=unavailable`; DEMUCA placeholders are never treated as
-model predictions.
+`processed/features/model_predictions.json`. Without an authorized model, the
+CLI remains fail-closed by default and reports `status=unavailable`. For an
+explicitly review-only run, `--allow-provisional-evidence` exposes
+non-calibrated audio and movement cues from the real media; these are not model
+predictions, cannot authorize training, and always retain
+`training_authorized=false` and `review_required=true`.
+
+The HTTP orchestrator enables this review-only evidence path so a real worker
+run does not collapse into all-zero placeholders while no production model is
+deployed. It still never enables training or clinical inference authorization.
 
 Para preparar las ventanas reales destinadas a revisión del terapeuta, sin
 crear etiquetas de entrenamiento, ejecute:
@@ -98,8 +105,9 @@ evaluation lacks clinical approval, and the artifact always declares
 `calibration_status=not_calibrated`, `ground_truth=false`, and
 `training_authorized=false`.
 
-When no recorded evaluation exists, `analyze_video.py` returns `demuca.status="draft"`
-and points to `processed/features/demuca_draft.json`. Its zero values are empty
+When no recorded evaluation exists and no provisional evidence was requested,
+`analyze_video.py` returns `demuca.status="draft"` and points to
+`processed/features/demuca_draft.json`. Its zero values are empty
 workflow defaults for the therapist, not model predictions; the therapist must
 replace them before clinical interpretation.
 

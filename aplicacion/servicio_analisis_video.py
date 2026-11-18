@@ -37,6 +37,7 @@ class ServicioAnalisisVideo:
         progress_callback: Callable[[str, str], None] | None = None,
         prediction_model: Path | None = None,
         allow_experimental_demo: bool = False,
+        allow_provisional_evidence: bool = False,
     ) -> dict[str, Any]:
         video_path = video_path.resolve()
         project_root = project_root.resolve()
@@ -119,6 +120,7 @@ class ServicioAnalisisVideo:
             prediction_model,
             window_seconds=window_seconds,
             allow_experimental_demo=allow_experimental_demo,
+            allow_provisional_evidence=allow_provisional_evidence,
         )
         demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
         if demuca_path.is_file():
@@ -134,6 +136,7 @@ class ServicioAnalisisVideo:
             draft = write_demuca_draft(session_dir)
             demuca = {
                 **draft,
+                "data": draft,
                 "escala": "DEMUCA",
                 "version": "mvp-projection-1.1",
                 "score_scale": DEMUCA_SCALE,

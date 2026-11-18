@@ -92,6 +92,7 @@ def analyze_video(
     progress_callback: Callable[[str, str], None] | None = None,
     prediction_model: Path | None = None,
     allow_experimental_demo: bool = False,
+    allow_provisional_evidence: bool = False,
 ) -> dict[str, Any]:
     """Adaptador CLI para el caso de uso de aplicación."""
     return ServicioAnalisisVideo(probe_duration, process_session).ejecutar(
@@ -101,6 +102,7 @@ def analyze_video(
         progress_callback=progress_callback,
         prediction_model=prediction_model,
         allow_experimental_demo=allow_experimental_demo,
+        allow_provisional_evidence=allow_provisional_evidence,
     )
 
 
@@ -121,6 +123,11 @@ def main() -> int:
         action="store_true",
         help="Allow the explicitly marked demo model; never enables clinical inference.",
     )
+    parser.add_argument(
+        "--allow-provisional-evidence",
+        action="store_true",
+        help="Expose extracted audio/movement cues when no authorized model exists.",
+    )
     args = parser.parse_args()
     reporter = ProgressReporter(enabled=not args.no_progress)
     try:
@@ -135,6 +142,7 @@ def main() -> int:
             progress_callback=reporter,
             prediction_model=args.prediction_model,
             allow_experimental_demo=args.allow_experimental_demo,
+            allow_provisional_evidence=args.allow_provisional_evidence,
         )
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False))

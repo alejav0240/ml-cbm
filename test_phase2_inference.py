@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from models import MultilabelLogisticModel
-from phase2_inference import predict_session
+from phase2_inference import build_feature_rows, predict_session
 
 
 class Phase2InferenceTests(unittest.TestCase):
@@ -72,6 +72,65 @@ class Phase2InferenceTests(unittest.TestCase):
             self.assertNotIn("session_id", sent["rows"][0])
             self.assertEqual(result["model_version"], "v-remote")
             self.assertEqual(result["windows"][0]["predictions"]["event"], 1)
+
+    def test_builds_rows_from_current_acoustic_window_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = Path(directory) / "S002"
+            features = session / "processed" / "features"
+            features.mkdir(parents=True)
+            (session / "metadata").mkdir()
+            (session / "metadata" / "session.json").write_text(json.dumps({
+                "technical": {"duration_seconds": 10},
+            }))
+            (features / "acoustic_features.json").write_text(json.dumps({
+                "windows": [
+                    {"timestamp_seconds": 2.5, "rms_energy": 0.2, "zero_crossing_rate": 0.1},
+                    {"timestamp_seconds": 7.5, "rms_energy": 0.4, "zero_crossing_rate": 0.2},
+                ],
+            }))
+            (features / "visual_motion.json").write_text(json.dumps({
+                "timestamps": [1, 6], "motion_intensity": [1, 2],
+            }))
+
+            rows = build_feature_rows(session, 5.0)
+
+            self.assertEqual([row["window_id"] for row in rows], ["S002_W0000", "S002_W0001"])
+            self.assertEqual(rows[1]["audio_rms_mean"], 0.4)
+
+    def test_provisional_evidence_is_explicitly_not_authorized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = Path(directory) / "S003"
+            features = session / "processed" / "features"
+            features.mkdir(parents=True)
+            (session / "metadata").mkdir()
+            (session / "metadata" / "session.json").write_text(json.dumps({
+                "technical": {"duration_seconds": 5},
+            }))
+            (features / "acoustic_features.json").write_text(json.dumps({
+                "windows": [{
+                    "timestamp_seconds": 2.5,
+                    "rms_energy": 0.2,
+                    "zero_crossing_rate": 0.1,
+                    "voiced_frame_fraction": 0.2,
+                }],
+            }))
+            (features / "visual_motion.json").write_text(json.dumps({
+                "timestamps": [1], "motion_intensity": [1],
+            }))
+            (features / "vocalization_candidates.json").write_text(json.dumps({
+                "candidates": [{"start_seconds": 1, "end_seconds": 2}],
+            }))
+
+            result = predict_session(
+                session,
+                None,
+                allow_provisional_evidence=True,
+            )
+
+            self.assertEqual(result["status"], "provisional_evidence")
+            self.assertFalse(result["training_authorized"])
+            self.assertTrue(result["review_required"])
+            self.assertEqual(len(result["windows"]), 1)
 
 
 if __name__ == "__main__":

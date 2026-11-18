@@ -13,10 +13,194 @@ from models import FEATURE_COLUMNS, MultilabelLogisticModel
 from multimodal_features import derived_multimodal_features
 
 
+def _clamp_probability(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _relative_signal(value: float, values: list[float]) -> float:
+    """Convert a session-local signal into an explicitly non-calibrated cue."""
+    if not values:
+        return 0.0
+    minimum = min(values)
+    maximum = max(values)
+    if maximum <= minimum:
+        return 0.0
+    return _clamp_probability((value - minimum) / (maximum - minimum))
+
+
+def build_provisional_evidence(
+    session_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    window_seconds: float,
+) -> dict[str, Any]:
+    """Expose real extracted signals when no authorized model is available.
+
+    These cues are deliberately not model predictions, labels, or clinical
+    scores. They make the worker useful for review while preserving the
+    fail-closed training and production-model gates.
+    """
+    features_dir = session_dir / "processed" / "features"
+    acoustic = _read_feature_payload(features_dir, "acoustic_features.json", "audio_features.json")
+    visual = _read_feature_payload(features_dir, "movement_interaction.json", "visual_motion.json")
+    candidates_payload = {}
+    candidates_path = features_dir / "vocalization_candidates.json"
+    if candidates_path.is_file():
+        candidates_payload = json.loads(candidates_path.read_text(encoding="utf-8"))
+
+    acoustic_windows = acoustic.get("windows", [])
+    if not isinstance(acoustic_windows, list):
+        acoustic_windows = []
+    visual_samples = _visual_samples(visual)
+    motion_values = [value for _, value in visual_samples]
+    candidates = candidates_payload.get("candidates", [])
+    if not isinstance(candidates, list):
+        candidates = []
+
+    windows: list[dict[str, Any]] = []
+    for row in rows:
+        start = float(row["start_seconds"])
+        end = float(row["end_seconds"])
+        acoustic_item = next(
+            (
+                item for item in acoustic_windows
+                if start <= float(item.get("timestamp_seconds", -1)) < end
+            ),
+            None,
+        )
+        motion_in_window = [
+            value for timestamp, value in visual_samples if start <= timestamp < end
+        ]
+        motion_mean = (
+            sum(motion_in_window) / len(motion_in_window)
+            if motion_in_window
+            else float(row.get("visual_motion_mean", 0.0))
+        )
+        candidate_count = sum(
+            1
+            for candidate in candidates
+            if float(candidate.get("start_seconds", end)) < end
+            and float(candidate.get("end_seconds", start)) > start
+        )
+        voiced_fraction = (
+            float(acoustic_item.get("voiced_frame_fraction", 0.0))
+            if isinstance(acoustic_item, dict)
+            else 0.0
+        )
+        rms = (
+            float(acoustic_item.get("rms_energy", 0.0))
+            if isinstance(acoustic_item, dict)
+            else float(row.get("audio_rms_mean", 0.0))
+        )
+        probabilities = {
+            "visual__MOVIMIENTO": _relative_signal(motion_mean, motion_values),
+            # This is a detector candidate, not an attributed vocalization.
+            "audio__VOCALIZACION": _clamp_probability(
+                max(voiced_fraction * 2.0, min(candidate_count / 2.0, 1.0))
+            ),
+            "audio__SILENCIO": _clamp_probability(
+                1.0 - _relative_signal(rms, [
+                    float(item.get("rms_energy", 0.0))
+                    for item in acoustic_windows
+                    if isinstance(item, dict)
+                ])
+            ),
+        }
+        windows.append({
+            "window_id": row["window_id"],
+            "start_seconds": start,
+            "end_seconds": end,
+            "predictions": {
+                label: int(value >= 0.5)
+                for label, value in probabilities.items()
+            },
+            "probabilities": {
+                label: round(value, 4)
+                for label, value in probabilities.items()
+            },
+            "evidence": {
+                "motion_samples": len(motion_in_window),
+                "periodic_vocalization_candidates": candidate_count,
+                "voiced_frame_fraction": round(voiced_fraction, 4),
+            },
+        })
+
+    return {
+        "status": "provisional_evidence",
+        "model_type": "session_signal_heuristics",
+        "model_path": None,
+        "feature_columns": ["audio_rms_mean", "visual_motion_mean"],
+        "training_authorized": False,
+        "demo_only": False,
+        "ground_truth": False,
+        "review_required": True,
+        "calibration_status": "not_calibrated",
+        "notice": (
+            "Evidencia provisional derivada de señales de audio y movimiento. "
+            "No son predicciones clínicas, no identifican al paciente y no "
+            "pueden utilizarse para entrenamiento sin revisión y autorización."
+        ),
+        "window_seconds": window_seconds,
+        "windows": windows,
+    }
+
+
 def _window_values(payload: dict[str, Any], timestamp_key: str, value_key: str, start: float, end: float) -> list[float]:
+    window_items = payload.get("windows")
+    if isinstance(window_items, list):
+        values = []
+        for item in window_items:
+            if not isinstance(item, dict):
+                continue
+            timestamp = item.get("timestamp_seconds")
+            if timestamp is None:
+                item_start = item.get("start_seconds")
+                item_end = item.get("end_seconds")
+                if (
+                    isinstance(item_start, (int, float))
+                    and isinstance(item_end, (int, float))
+                    and float(item_start) < end
+                    and float(item_end) > start
+                ):
+                    timestamp = (float(item_start) + float(item_end)) / 2.0
+            value = item.get(value_key)
+            if value is None and value_key == "motion_intensity":
+                value = item.get("anonymous_motion_mean_per_second")
+            if (
+                isinstance(timestamp, (int, float))
+                and isinstance(value, (int, float))
+                and start <= float(timestamp) < end
+            ):
+                values.append(float(value))
+        return values
     timestamps = [float(value) for value in payload.get(timestamp_key, [])]
     values = [float(value) for value in payload.get(value_key, [])]
     return [value for timestamp, value in zip(timestamps, values) if start <= timestamp < end]
+
+
+def _visual_samples(payload: dict[str, Any]) -> list[tuple[float, float]]:
+    timestamps = payload.get("timestamps", [])
+    motion = payload.get("motion_intensity", [])
+    samples = [
+        (float(timestamp), float(value))
+        for timestamp, value in zip(timestamps, motion)
+    ]
+    if samples:
+        return samples
+    windows = payload.get("windows", [])
+    if not isinstance(windows, list):
+        return []
+    return [
+        (
+            (float(item["start_seconds"]) + float(item["end_seconds"])) / 2.0,
+            float(item["anonymous_motion_mean_per_second"]),
+        )
+        for item in windows
+        if isinstance(item, dict)
+        and isinstance(item.get("start_seconds"), (int, float))
+        and isinstance(item.get("end_seconds"), (int, float))
+        and isinstance(item.get("anonymous_motion_mean_per_second"), (int, float))
+    ]
 
 
 def _read_feature_payload(features_dir: Path, *names: str) -> dict[str, Any]:
@@ -159,6 +343,7 @@ def predict_session(
     *,
     window_seconds: float = 5.0,
     allow_experimental_demo: bool = False,
+    allow_provisional_evidence: bool = False,
     inference_url: str | None = None,
     inference_api_key: str | None = None,
 ) -> dict[str, Any]:
@@ -175,6 +360,14 @@ def predict_session(
             (candidate for candidate in (production_model, legacy_model) if candidate and candidate.is_file()),
             None,
         )
+    if not inference_url and model_path is None and allow_provisional_evidence:
+        rows = build_feature_rows(session_dir, window_seconds)
+        if rows:
+            return build_provisional_evidence(
+                session_dir,
+                rows,
+                window_seconds=window_seconds,
+            )
     if not inference_url and model_path is None:
         return {"status": "unavailable", "reason": "authorized_model_not_configured", "windows": []}
     rows = build_feature_rows(session_dir, window_seconds)
