@@ -14,12 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from audit_dataset import MODALITIES, PROJECT_ROOT, read_json
+from dataset_source import resolve_sessions_dir
 from review_approval import APPROVAL_RELATIVE_PATH, GUIDE_RELATIVE_PATH, load_annotation_approval
 from visual_review import reviewed_visual_features_by_window
 from label_contract import validate_task_contract
 
 
-DEFAULT_SESSIONS_DIR = PROJECT_ROOT / "dataset" / "dataset" / "sessions"
+DEFAULT_SESSIONS_DIR = resolve_sessions_dir()
 TASK_CONFIG = PROJECT_ROOT / "ml" / "task.json"
 GENERATOR_PATH = Path(__file__).resolve()
 OUTPUT_COLUMNS = (
