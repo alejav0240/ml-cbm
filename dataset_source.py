@@ -15,8 +15,8 @@ DEFAULT_MOUNT_ENV = "DEMUCA_DATASET_ROOT"
 def _candidate_roots(explicit: Path | None = None) -> list[Path]:
     """Return dataset roots in deterministic priority order.
 
-    A value passed by CLI or DEMUCA_DATASET_ROOT wins. The remaining candidates
-    preserve the integrated checkout and the historical layout used by ml-cbm.
+    DEMUCA_DATASET_ROOT wins when configured; otherwise an explicit project root
+    is considered before the integrated checkout and historical ml-cbm layout.
     """
     configured_value = os.getenv(DEFAULT_MOUNT_ENV) or os.getenv("DATASET_ROOT")
     configured = Path(configured_value).expanduser() if configured_value else explicit
