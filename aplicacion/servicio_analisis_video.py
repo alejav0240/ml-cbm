@@ -134,7 +134,7 @@ class ServicioAnalisisVideo:
             demuca = {
                 **draft,
                 "escala": "DEMUCA",
-                "version": "mvp-projection-1.0",
+                "version": "mvp-projection-1.1",
                 "status": "draft",
                 "score_source": "therapist_editable_draft",
                 "path": "processed/features/demuca_draft.json",
