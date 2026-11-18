@@ -39,6 +39,8 @@ def resolve_sessions_dir(explicit: Path | None = None) -> Path:
     """
     for root in _candidate_roots(explicit):
         candidates = (
+            (root,) if root.name == "sessions" else (),
+        ) + (
             root / "dataset" / "sessions",
             root / "sessions",
             root / "dataset" / "dataset" / "sessions",
