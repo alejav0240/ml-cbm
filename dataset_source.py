@@ -38,13 +38,14 @@ def resolve_sessions_dir(explicit: Path | None = None) -> Path:
     whether a missing private volume is a blocking error.
     """
     for root in _candidate_roots(explicit):
-        candidates = (
-            (root,) if root.name == "sessions" else (),
-        ) + (
+        candidates = []
+        if root.name == "sessions":
+            candidates.append(root)
+        candidates.extend((
             root / "dataset" / "sessions",
             root / "sessions",
             root / "dataset" / "dataset" / "sessions",
-        )
+        ))
         for candidate in candidates:
             if candidate.is_dir():
                 return candidate
