@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from infraestructura.persistencia_json import RepositorioArtefactos
 from demuca_draft import write_demuca_draft
-from demuca_projection import build_demuca_from_predictions
+from demuca_projection import DEMUCA_SCALE, build_demuca_from_predictions
 from phase2_inference import predict_session, write_predictions
 
 
@@ -123,6 +123,7 @@ class ServicioAnalisisVideo:
         demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
         if demuca_path.is_file():
             demuca: dict[str, Any] = repositorio.leer_json(demuca_path)
+            demuca.setdefault("score_scale", DEMUCA_SCALE)
             demuca["status"] = "provisional"
         elif model_predictions.get("windows"):
             demuca = build_demuca_from_predictions(
@@ -135,6 +136,7 @@ class ServicioAnalisisVideo:
                 **draft,
                 "escala": "DEMUCA",
                 "version": "mvp-projection-1.1",
+                "score_scale": DEMUCA_SCALE,
                 "status": "draft",
                 "score_source": "therapist_editable_draft",
                 "path": "processed/features/demuca_draft.json",
