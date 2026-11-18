@@ -2,6 +2,8 @@
 
 # Tubería de ML de DEMUCA (DEMUCA ML Pipeline)
 
+La fuente de datos externa y su contrato de montaje están documentados en [DATASET_SOURCE.md](DATASET_SOURCE.md). El pipeline resuelve `DEMUCA_DATASET_ROOT` y conserva la procedencia en los manifiestos.
+
 Este directorio constituye el límite para los flujos de trabajo específicos de cada modelo. La ingestión de conjuntos de datos, el procesamiento de multimedia y la anotación permanecen en `dataset/`; este directorio no debe reescribir los datos de origen ni convertir anotaciones provisionales en etiquetas.
 
 ## Primer paso actual: auditoría conservativa
