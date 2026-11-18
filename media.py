@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from session_manifest import load_and_validate_session_manifest
+from dataset_source import resolve_dataset_root, resolve_sessions_dir
 from infraestructura.medios import AdaptadorFFmpeg
 
 
@@ -28,7 +29,8 @@ def run_existing_extraction(
     session_id: str, project_root: Path, overwrite: bool = False
 ) -> dict[str, str]:
     """Run existing normalization/features scripts only when outputs are absent."""
-    session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
+    dataset_root = resolve_dataset_root(project_root)
+    session_dir = resolve_sessions_dir(project_root) / session_id
     metadata_path = session_dir / "metadata" / "session.json"
     manifest_path = session_dir / "session_manifest.json"
     manifest_mode = manifest_path.is_file()
@@ -42,7 +44,7 @@ def run_existing_extraction(
     audio_features = features_dir / "audio_features.json"
     visual_features = features_dir / "visual_motion.json"
 
-    scripts_dir = project_root / "dataset" / "scripts"
+    scripts_dir = dataset_root / "scripts"
 
     def invoke(script_name: str, force_overwrite: bool = False) -> None:
         command = [
@@ -50,7 +52,7 @@ def run_existing_extraction(
             str(scripts_dir / script_name),
             session_id,
             "--raiz",
-            str(project_root / "dataset"),
+            str(dataset_root),
         ]
         if overwrite or force_overwrite:
             command.append("--sobrescribir")

@@ -14,12 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from audit_dataset import MODALITIES, PROJECT_ROOT, read_json
+from dataset_source import resolve_sessions_dir, source_metadata
 from review_approval import APPROVAL_RELATIVE_PATH, GUIDE_RELATIVE_PATH, load_annotation_approval
 from visual_review import reviewed_visual_features_by_window
 from label_contract import validate_task_contract
 
 
-DEFAULT_SESSIONS_DIR = PROJECT_ROOT / "dataset" / "dataset" / "sessions"
+DEFAULT_SESSIONS_DIR = resolve_sessions_dir()
 TASK_CONFIG = PROJECT_ROOT / "ml" / "task.json"
 GENERATOR_PATH = Path(__file__).resolve()
 OUTPUT_COLUMNS = (
@@ -442,6 +443,7 @@ def write_dataset(rows: list[dict[str, Any]], skipped: list[dict[str, str]],
         "review_required_rows": sum(not bool(row.get("ground_truth")) for row in rows),
         "data_sha256": digest,
         "session_sources_sha256": source_manifest,
+        "dataset_source": source_metadata(sessions_dir),
         "skipped_sessions_or_windows": skipped,
         "training_authorized": False,
         "experimental_unreviewed_labels": any(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from audit_dataset import DEFAULT_SESSIONS_DIR, PROJECT_ROOT, audit_dataset, read_json
+from dataset_source import source_metadata
 from prepare_dataset import build_rows, write_dataset
 from pipeline_graph import write_pipeline_graph
 from models import FEATURE_COLUMNS, MultilabelLogisticModel
@@ -335,10 +336,16 @@ def main() -> int:
                 if metrics_path.is_file()
                 else {}
             )
+            dataset_source = source_metadata(args.sessions_dir)
             run_id = log_run(
                 experiment_name=args.experiment,
                 run_name="demuca-event-mvp",
-                params={"seed": args.seed, **status.get("audit_summary", {})},
+                params={
+                    "seed": args.seed,
+                    **status.get("audit_summary", {}),
+                    "dataset_source_repository": dataset_source["repository"],
+                    "dataset_source_ref": dataset_source["ref"],
+                },
                 metrics={
                     "candidate_windows": status.get("candidate_windows", 0),
                     "candidate_patients": status.get("candidate_patients", 0),

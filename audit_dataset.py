@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from review_approval import load_annotation_approval
+from dataset_source import resolve_sessions_dir, source_metadata
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SESSIONS_DIR = PROJECT_ROOT / "dataset" / "dataset" / "sessions"
+DEFAULT_SESSIONS_DIR = resolve_sessions_dir()
 MODALITIES = ("visual", "audio", "interaction")
 PROCESSING_STEPS = (
     "video_processed",
@@ -350,6 +351,7 @@ def audit_dataset(sessions_dir: Path) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "sessions_dir": str(sessions_dir),
+        "dataset_source": source_metadata(sessions_dir),
         "sessions_total": len(sessions),
         "sessions_with_technical_prerequisites": sum(
             session["technical_prerequisites_met"] for session in sessions

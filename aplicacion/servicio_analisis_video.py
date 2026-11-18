@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from infraestructura.persistencia_json import RepositorioArtefactos
+from dataset_source import resolve_sessions_dir
 from demuca_draft import write_demuca_draft
 from phase2_inference import predict_session, write_predictions
 
@@ -43,7 +44,7 @@ class ServicioAnalisisVideo:
             raise FileNotFoundError(f"video file not found: {video_path}")
         if not session_id_pattern.fullmatch(session_id):
             raise ValueError("session_id must use 1-64 letters, numbers, underscores, or hyphens")
-        session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
+        session_dir = resolve_sessions_dir(project_root) / session_id
         default_model = project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task"
         selected_model = pose_model.resolve() if pose_model is not None else default_model
         should_skip_pose = skip_pose is True or pose_model is None

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from create_window_index import write_window_index
+from dataset_source import resolve_sessions_dir
 from demuca_estimates import write_demuca_estimates
 from demuca_draft import write_demuca_draft
 from media import (
@@ -113,7 +114,7 @@ def process_session(
     overwrite: bool,
     progress_callback: Any | None = None,
 ) -> dict[str, Any]:
-    session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
+    session_dir = resolve_sessions_dir(project_root) / session_id
     if progress_callback:
         progress_callback("extraccion", "start")
     extraction = run_existing_extraction(session_id, project_root, overwrite)
