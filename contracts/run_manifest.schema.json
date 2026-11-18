@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cbm.local/contracts/run-manifest.schema.json",
+  "title": "DEMUCA processing run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "video_path"],
+  "properties": {
+    "run_id": {"type": "string", "pattern": "^run-[A-Za-z0-9_-]+$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"},
+    "video_path": {"type": "string", "minLength": 1},
+    "pipeline_version": {"type": "string", "default": "0.3.0"},
+    "window_seconds": {"type": "number", "exclusiveMinimum": 0, "default": 5},
+    "max_tail_trim_seconds": {"type": "number", "minimum": 0, "default": 0.2},
+    "pose_model": {"type": ["string", "null"]},
+    "skip_pose": {"type": "boolean", "default": true},
+    "callback_url": {"type": "string", "format": "uri"}
+  }
+}
