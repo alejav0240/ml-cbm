@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from infraestructura.persistencia_json import RepositorioArtefactos
 from demuca_draft import write_demuca_draft
+from demuca_projection import build_demuca_from_predictions
 from phase2_inference import predict_session, write_predictions
 
 
@@ -110,20 +111,38 @@ class ServicioAnalisisVideo:
             else:
                 summary = self._process_session(*pipeline_args, progress_callback=progress_callback)
 
+        # Predict observable events first so every successful analysis can expose
+        # a DEMUCA-shaped result. A recorded therapist evaluation still takes
+        # precedence over the provisional projection.
+        model_predictions = predict_session(
+            session_dir,
+            prediction_model,
+            window_seconds=window_seconds,
+            allow_experimental_demo=allow_experimental_demo,
+        )
         demuca_path = session_dir / "processed" / "features" / "demuca_estimates.json"
         if demuca_path.is_file():
             demuca: dict[str, Any] = repositorio.leer_json(demuca_path)
             demuca["status"] = "provisional"
+        elif model_predictions.get("windows"):
+            demuca = build_demuca_from_predictions(
+                session_id=session_id,
+                model_predictions=model_predictions,
+            )
         else:
             draft = write_demuca_draft(session_dir)
             demuca = {
+                **draft,
+                "escala": "DEMUCA",
+                "version": "mvp-projection-1.0",
                 "status": "draft",
-                "data": draft,
+                "score_source": "therapist_editable_draft",
                 "path": "processed/features/demuca_draft.json",
                 "review_required": True,
                 "ground_truth": False,
                 "training_authorized": False,
-                "notice": "Default values are placeholders for therapist review; they are not clinical scores.",
+                "calibration_status": "not_calibrated",
+                "notice": "No hay ventanas de predicción autorizadas; valores iniciales para revisión del terapeuta.",
             }
         response = {
             "schema_version": "1.0", "status": summary["status"], "session_id": session_id,
@@ -137,12 +156,7 @@ class ServicioAnalisisVideo:
                              "movement_interaction_status": summary["movement_interaction_status"],
                              "artifact_validation": summary["artifact_validation"]},
             "demuca": demuca,
-            "model_predictions": predict_session(
-                session_dir,
-                prediction_model,
-                window_seconds=window_seconds,
-                allow_experimental_demo=allow_experimental_demo,
-            ),
+            "model_predictions": model_predictions,
             "session_relative_path": f"dataset/dataset/sessions/{session_id}",
         }
         prediction_payload = response["model_predictions"]
