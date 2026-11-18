@@ -12,8 +12,8 @@ from typing import Any
 
 DEMUCA_SCALE = {
     "min": 0,
-    "max": 3,
-    "labels": {"0": "nada", "1": "bajo", "2": "medio", "3": "alto"},
+    "max": 2,
+    "labels": {"0": "nada", "1": "medio", "2": "alto"},
 }
 
 # Each entry is (model event label, invert). Inverted signals represent the
@@ -104,13 +104,12 @@ SIGNAL_MAP: dict[str, tuple[tuple[str, bool], ...]] = {
 
 
 def _score_from_probability(value: float) -> int:
-    if value < 0.25:
+    """Map evidence probability to the unified DEMUCA 0–2 scale."""
+    if value < 0.33:
         return 0
-    if value < 0.50:
+    if value < 0.66:
         return 1
-    if value < 0.75:
-        return 2
-    return 3
+    return 2
 
 
 def _probability(item: dict[str, Any], label: str) -> float | None:
@@ -177,7 +176,7 @@ def build_demuca_from_predictions(
     result: dict[str, Any] = {
         "sesion_id": session_id,
         "escala": "DEMUCA",
-        "version": "mvp-projection-1.0",
+        "version": "mvp-projection-1.1",
         "score_scale": DEMUCA_SCALE,
         "status": "provisional" if windows else "unavailable",
         "score_source": "multimodal_observable_event_projection",
