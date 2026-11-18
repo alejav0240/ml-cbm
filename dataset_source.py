@@ -18,15 +18,27 @@ def _candidate_roots(explicit: Path | None = None) -> list[Path]:
     A value passed by CLI or DEMUCA_DATASET_ROOT wins. The remaining candidates
     preserve the integrated checkout and the historical layout used by ml-cbm.
     """
-    configured = explicit
-    if configured is None:
-        configured_value = os.getenv(DEFAULT_MOUNT_ENV) or os.getenv("DATASET_ROOT")
-        configured = Path(configured_value).expanduser() if configured_value else None
+    configured_value = os.getenv(DEFAULT_MOUNT_ENV) or os.getenv("DATASET_ROOT")
+    configured = Path(configured_value).expanduser() if configured_value else explicit
     candidates = []
     if configured is not None:
         candidates.append(configured)
     candidates.extend((PROJECT_ROOT / "dataset-ml", PROJECT_ROOT / "dataset"))
     return list(dict.fromkeys(path.resolve() for path in candidates))
+
+
+
+def resolve_dataset_root(explicit: Path | None = None) -> Path:
+    """Resolve the checkout root that contains dataset/sessions or sessions."""
+    roots = _candidate_roots(explicit)
+    for root in roots:
+        if root.name == "sessions":
+            return root.parent
+        if (root / "dataset" / "sessions").is_dir() or (root / "sessions").is_dir():
+            return root
+        if (root / "dataset" / "dataset" / "sessions").is_dir():
+            return root
+    return roots[0]
 
 
 def resolve_sessions_dir(explicit: Path | None = None) -> Path:
@@ -69,6 +81,7 @@ __all__ = [
     "DATASET_REPOSITORY",
     "DEFAULT_MOUNT_ENV",
     "PROJECT_ROOT",
+    "resolve_dataset_root",
     "resolve_sessions_dir",
     "source_metadata",
 ]
