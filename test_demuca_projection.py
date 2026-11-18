@@ -27,9 +27,11 @@ class DemucaProjectionTests(unittest.TestCase):
 
         self.assertEqual(result["sesion_id"], "S001")
         self.assertEqual(result["escala"], "DEMUCA")
+        self.assertEqual(result["score_scale"]["max"], 2)
+        self.assertEqual(result["score_scale"]["labels"], {"0": "nada", "1": "medio", "2": "alto"})
         self.assertEqual(result["status"], "provisional")
-        self.assertEqual(result["exploracion_vocal"]["vocalizaciones"], 3)
-        self.assertEqual(result["movimiento_corporal"]["andar"], 3)
+        self.assertEqual(result["exploracion_vocal"]["vocalizaciones"], 2)
+        self.assertEqual(result["movimiento_corporal"]["andar"], 2)
         self.assertEqual(result["interaccion_social_cognitiva"]["contacto_visual"], 0)
         self.assertTrue(result["review_required"])
         self.assertFalse(result["ground_truth"])
