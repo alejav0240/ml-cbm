@@ -37,7 +37,7 @@ def resolve_dataset_root(explicit: Path | None = None) -> Path:
         if (root / "dataset" / "sessions").is_dir() or (root / "sessions").is_dir():
             return root
         if (root / "dataset" / "dataset" / "sessions").is_dir():
-            return root
+            return root / "dataset"
     return roots[0]
 
 
