@@ -27,6 +27,15 @@ class DatasetSourceTests(unittest.TestCase):
             expected.mkdir(parents=True)
             self.assertEqual(resolve_sessions_dir(root), expected.resolve())
 
+
+    def test_legacy_checkout_uses_dataset_as_script_root(self):
+        from dataset_source import resolve_dataset_root
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dataset" / "dataset" / "sessions").mkdir(parents=True)
+            self.assertEqual(resolve_dataset_root(root), (root / "dataset").resolve())
+
     def test_returns_canonical_missing_path_for_empty_mount(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
