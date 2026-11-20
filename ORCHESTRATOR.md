@@ -26,4 +26,9 @@ POST http://localhost:8020/v1/runs
 
 The response is 202 Accepted with status=queued. The backend remains the system of record and should persist the returned run_id in ProcessingRun. The callback payload contains completed or failed, the full analysis response, and the source SHA-256.
 
-The orchestrator stores only transient run state in memory. Persistent status, artifacts, approvals and clinical evaluations belong in backend-cbm.
+The orchestrator persists its operational snapshot atomically in
+`ML_RUN_STATE_PATH`, or in `ML_MEDIA_ROOT/orchestrator-runs.json` by default.
+This snapshot lets operators inspect runs after a restart; the backend remains
+the system of record for status, artifacts, approvals and clinical evaluations.
+Callbacks and initial dispatches use three bounded attempts with exponential
+backoff.

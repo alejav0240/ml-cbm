@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Small authenticated HTTP orchestrator for the DEMUCA multimodal pipeline.
-
-The service deliberately keeps run state in memory. The backend remains the
-system of record through the callback payload, so a restart does not create a
-second clinical run. Media paths are restricted to ML_MEDIA_ROOT.
-"""
+"""Small authenticated HTTP orchestrator for the DEMUCA multimodal pipeline."""
 
 from __future__ import annotations
 
@@ -16,6 +11,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -29,12 +25,54 @@ from analyze_video import analyze_video
 
 
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+PIPELINE_STAGES = (
+    ("extraction", "Extracción y normalización"),
+    ("segmentation", "Segmentación y sincronización"),
+    ("pose", "Análisis de pose"),
+    ("audio", "Características acústicas"),
+    ("movement", "Movimiento e interacción"),
+    ("validation", "Validación de artefactos"),
+    ("inference", "Inferencia"),
+    ("demuca", "Proyección DEMUCA"),
+    ("human_review", "Revisión profesional"),
+)
+PHASE_TO_STAGE = {
+    "extraccion": "extraction",
+    "segmentacion": "segmentation",
+    "pose": "pose",
+    "audio": "audio",
+    "movimiento": "movement",
+    "sincronizacion": "validation",
+}
 
 
 class RunStore:
-    def __init__(self) -> None:
+    def __init__(self, state_path: Path) -> None:
         self._lock = threading.RLock()
+        self.state_path = state_path
         self._runs: dict[str, dict[str, Any]] = {}
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return
+        if isinstance(payload, dict):
+            self._runs = {
+                key: value
+                for key, value in payload.items()
+                if isinstance(key, str) and isinstance(value, dict)
+            }
+
+    def _persist(self) -> None:
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(self._runs, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(self.state_path)
 
     def create(self, payload: dict[str, Any]) -> dict[str, Any]:
         run_id = payload.get("run_id") or f"run-{uuid.uuid4()}"
@@ -50,8 +88,11 @@ class RunStore:
                 "updated_at": _now(),
                 "result": None,
                 "error": None,
+                "pipeline_stages": _initial_stages(),
+                "semantic_status": "pending",
             }
             self._runs[run_id] = record
+            self._persist()
             return dict(record)
 
     def update(self, run_id: str, **changes: Any) -> dict[str, Any]:
@@ -60,6 +101,7 @@ class RunStore:
                 raise KeyError(run_id)
             self._runs[run_id].update(changes)
             self._runs[run_id]["updated_at"] = _now()
+            self._persist()
             return dict(self._runs[run_id])
 
     def get(self, run_id: str) -> dict[str, Any] | None:
@@ -70,6 +112,23 @@ class RunStore:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _initial_stages() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": stage_id,
+            "label": label,
+            "status": "pending",
+            "progress": 0,
+            "message": None,
+            "started_at": None,
+            "finished_at": None,
+            "duration_ms": None,
+            "artifact_kinds": [],
+        }
+        for stage_id, label in PIPELINE_STAGES
+    ]
 
 
 def _sha256(path: Path) -> str:
@@ -93,7 +152,10 @@ class Orchestrator:
         self.project_root = project_root.resolve()
         self.api_key = api_key
         self.callback_key = callback_key or api_key
-        self.store = RunStore()
+        state_path = Path(
+            os.getenv("ML_RUN_STATE_PATH", str(self.media_root / "orchestrator-runs.json"))
+        )
+        self.store = RunStore(state_path)
 
     def authorize(self, headers: Any) -> bool:
         if self.api_key is None:
@@ -144,10 +206,43 @@ class Orchestrator:
         return record
 
     def _run(self, run_id: str, payload: dict[str, Any]) -> None:
-        self.store.update(run_id, status="running")
+        stages = _initial_stages()
+        self.store.update(run_id, status="running", pipeline_stages=stages)
         temporary_path = None
         try:
             video_path, temporary_path = self._materialize_video(payload)
+
+            if payload.get("skip_pose", True):
+                self._set_stage(
+                    stages,
+                    "pose",
+                    status="skipped",
+                    progress=100,
+                    message="No se configuró un modelo de pose",
+                )
+
+            def progress_callback(phase: str, state: str) -> None:
+                stage_id = PHASE_TO_STAGE.get(phase)
+                if stage_id is None:
+                    return
+                if state == "start":
+                    self._set_stage(
+                        stages,
+                        stage_id,
+                        status="running",
+                        progress=0,
+                        started_at=_now(),
+                    )
+                else:
+                    self._set_stage(
+                        stages,
+                        stage_id,
+                        status="completed",
+                        progress=100,
+                        finished_at=_now(),
+                    )
+                self._publish_stage(run_id, stages, payload.get("callback_url"))
+
             result = analyze_video(
                 video_path,
                 session_id=payload["session_id"],
@@ -156,20 +251,68 @@ class Orchestrator:
                 max_tail_trim_seconds=float(payload.get("max_tail_trim_seconds", 0.2)),
                 pose_model=payload.get("pose_model"),
                 skip_pose=payload.get("skip_pose", True),
+                progress_callback=progress_callback,
                 allow_provisional_evidence=True,
             )
             result["source_sha256"] = _sha256(video_path)
-            record = self.store.update(run_id, status="completed", result=result)
+            for stage_id in ("validation", "inference", "demuca"):
+                self._set_stage(
+                    stages,
+                    stage_id,
+                    status="completed",
+                    progress=100,
+                    finished_at=_now(),
+                )
+            self._set_stage(
+                stages,
+                "human_review",
+                message="Revisión profesional requerida",
+            )
+            semantic_status = result.get("status", "completed")
+            result["semantic_status"] = semantic_status
+            result["pipeline_stages"] = stages
+            record = self.store.update(
+                run_id,
+                status="completed",
+                result=result,
+                pipeline_stages=stages,
+                semantic_status=semantic_status,
+            )
         except Exception as error:
+            self._set_stage(
+                stages,
+                "validation",
+                status="failed",
+                message=str(error),
+                finished_at=_now(),
+            )
             record = self.store.update(
                 run_id,
                 status="failed",
                 error={"code": type(error).__name__, "message": str(error)},
+                pipeline_stages=stages,
             )
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
         callback_url = payload.get("callback_url")
+        if isinstance(callback_url, str) and callback_url:
+            self._callback(callback_url, record)
+
+    @staticmethod
+    def _set_stage(stages: list[dict[str, Any]], stage_id: str, **changes: Any) -> None:
+        for stage in stages:
+            if stage["id"] == stage_id:
+                stage.update(changes)
+                return
+
+    def _publish_stage(
+        self,
+        run_id: str,
+        stages: list[dict[str, Any]],
+        callback_url: Any,
+    ) -> None:
+        record = self.store.update(run_id, pipeline_stages=stages)
         if isinstance(callback_url, str) and callback_url:
             self._callback(callback_url, record)
 
@@ -220,12 +363,14 @@ class Orchestrator:
         headers = {"Content-Type": "application/json"}
         if self.callback_key:
             headers["X-ML-Service-Key"] = self.callback_key
-        try:
-            request = urlrequest.Request(callback_url, data=body, headers=headers, method="POST")
-            with urlrequest.urlopen(request, timeout=15):
-                pass
-        except Exception:
-            return
+        for attempt in range(3):
+            try:
+                request = urlrequest.Request(callback_url, data=body, headers=headers, method="POST")
+                with urlrequest.urlopen(request, timeout=15):
+                    return
+            except Exception:
+                if attempt < 2:
+                    time.sleep(2**attempt)
 
 
 def _optional_path(value: Any) -> Path | None:

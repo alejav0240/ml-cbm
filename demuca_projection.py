@@ -132,10 +132,12 @@ def _project_item(
             "confidence_percent": 0.0,
             "source_labels": [],
             "windows_supported": 0,
+            "evidence_windows": [],
         }
 
     signal_values: list[float] = []
     source_labels: list[str] = []
+    evidence_windows: list[dict[str, Any]] = []
     for label, invert in signals:
         values = [_probability(window, label) for window in windows]
         values = [value for value in values if value is not None]
@@ -145,12 +147,37 @@ def _project_item(
         value = sum(values) / len(values)
         signal_values.append(1.0 - value if invert else value)
 
+    for window in windows:
+        signal_details = []
+        for label, invert in signals:
+            probability = _probability(window, label)
+            if probability is None:
+                continue
+            signal_details.append(
+                {
+                    "label": label,
+                    "probability": round(probability, 4),
+                    "contribution": round(1.0 - probability if invert else probability, 4),
+                    "inverted": invert,
+                }
+            )
+        if signal_details:
+            evidence_windows.append(
+                {
+                    "window_id": window.get("window_id"),
+                    "start_seconds": window.get("start_seconds"),
+                    "end_seconds": window.get("end_seconds"),
+                    "signals": signal_details,
+                }
+            )
+
     if not signal_values:
         return 0, {
             "evidence_status": "missing_model_signal",
             "confidence_percent": 0.0,
             "source_labels": [label for label, _ in signals],
             "windows_supported": 0,
+            "evidence_windows": evidence_windows,
         }
 
     aggregate = sum(signal_values) / len(signal_values)
@@ -160,6 +187,7 @@ def _project_item(
         "confidence_percent": round(aggregate * 100.0, 2),
         "source_labels": source_labels,
         "windows_supported": len(windows),
+        "evidence_windows": evidence_windows,
     }
 
 
