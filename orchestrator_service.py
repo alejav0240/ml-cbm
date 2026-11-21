@@ -131,6 +131,39 @@ def _initial_stages() -> list[dict[str, Any]]:
     ]
 
 
+def _mark_reused_stages(
+    stages: list[dict[str, Any]], result: dict[str, Any]
+) -> None:
+    """Reflect cached pipeline work when analyze_video reuses its response."""
+    observations = result.get("observations")
+    if not isinstance(observations, dict):
+        return
+
+    pose_enabled = observations.get("pose_enabled") is True
+    movement_status = observations.get("movement_interaction_status")
+
+    for stage in stages:
+        stage_id = stage["id"]
+        if stage_id in {"extraction", "segmentation", "audio"}:
+            stage.update(status="completed", progress=100)
+        elif stage_id == "pose":
+            stage.update(
+                status="completed" if pose_enabled else "skipped",
+                progress=100,
+                message=None if pose_enabled else "No se configuró un modelo de pose",
+            )
+        elif stage_id == "movement":
+            movement_available = (
+                isinstance(movement_status, str)
+                and not movement_status.startswith("skipped")
+            )
+            stage.update(
+                status="completed" if movement_available else "skipped",
+                progress=100,
+                message=None if movement_available else str(movement_status or "Sin pose"),
+            )
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -207,7 +240,12 @@ class Orchestrator:
 
     def _run(self, run_id: str, payload: dict[str, Any]) -> None:
         stages = _initial_stages()
-        self.store.update(run_id, status="running", pipeline_stages=stages)
+        running_record = self.store.update(
+            run_id,
+            status="running",
+            pipeline_stages=stages,
+        )
+        self._callback(payload.get("callback_url"), running_record)
         temporary_path = None
         try:
             video_path, temporary_path = self._materialize_video(payload)
@@ -254,6 +292,7 @@ class Orchestrator:
                 progress_callback=progress_callback,
                 allow_provisional_evidence=True,
             )
+            _mark_reused_stages(stages, result)
             result["source_sha256"] = _sha256(video_path)
             for stage_id in ("validation", "inference", "demuca"):
                 self._set_stage(
@@ -270,6 +309,17 @@ class Orchestrator:
             )
             semantic_status = result.get("status", "completed")
             result["semantic_status"] = semantic_status
+            result["review_required"] = bool(
+                result.get("review_required")
+                or (
+                    isinstance(result.get("demuca"), dict)
+                    and result["demuca"].get("review_required") is True
+                )
+                or (
+                    isinstance(result.get("model_predictions"), dict)
+                    and result["model_predictions"].get("status") == "unavailable"
+                )
+            )
             result["pipeline_stages"] = stages
             record = self.store.update(
                 run_id,
@@ -358,7 +408,7 @@ class Orchestrator:
             raise
 
 
-    def _callback(self, callback_url: str, record: dict[str, Any]) -> None:
+    def _callback(self, callback_url: Any, record: dict[str, Any]) -> None:
         body = json.dumps(record, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         if self.callback_key:
