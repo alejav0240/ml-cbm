@@ -14,7 +14,7 @@ from typing import Any
 from create_window_index import write_window_index
 from demuca_estimates import write_demuca_estimates
 from demuca_draft import write_demuca_draft
-from media import (
+from worker.pipeline.media import (
     run_existing_extraction,
     segment_and_synchronize,
     synchronize_pose_with_segments,
@@ -34,7 +34,17 @@ validate_multimodal_artifacts = validar_sesion_multimodal
 from window_index import validate_window_index
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+class InsufficientDurationError(ValueError):
+    """The media is shorter than the configured full-window duration."""
+
+    code = "insufficient_duration_for_window"
+    user_message = (
+        "La sesión es demasiado corta para generar una ventana completa de "
+        "análisis. Se requiere una duración mayor o igual a 5 segundos."
+    )
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -64,9 +74,18 @@ def load_or_create_window_index(session_dir: Path, *, overwrite: bool) -> dict[s
         payload = json.loads(output_path.read_text(encoding="utf-8"))
         issues = validate_window_index(payload, session_dir)
         if issues:
+            if issues == ["windows_missing_or_empty"]:
+                raise InsufficientDurationError(
+                    "window_index_validation_failed:windows_missing_or_empty"
+                )
             raise ValueError("window_index_validation_failed:" + ";".join(issues))
         return payload
-    return write_window_index(session_dir, output_path, overwrite=overwrite)
+    payload = write_window_index(session_dir, output_path, overwrite=overwrite)
+    if not payload.get("windows"):
+        raise InsufficientDurationError(
+            "window_index_validation_failed:windows_missing_or_empty"
+        )
+    return payload
 
 
 def persist_or_reuse_audio_artifact(

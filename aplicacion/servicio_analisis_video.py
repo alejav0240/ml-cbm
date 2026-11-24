@@ -46,9 +46,21 @@ class ServicioAnalisisVideo:
         if not session_id_pattern.fullmatch(session_id):
             raise ValueError("session_id must use 1-64 letters, numbers, underscores, or hyphens")
         session_dir = project_root / "dataset" / "dataset" / "sessions" / session_id
-        default_model = project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task"
+        default_model = next(
+            (
+                candidate
+                for candidate in (
+                    project_root / "artifacts" / "models" / "pose_landmarker.task",
+                    project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task",
+                )
+                if candidate.is_file()
+            ),
+            project_root / "artifacts" / "models" / "pose_landmarker.task",
+        )
         selected_model = pose_model.resolve() if pose_model is not None else default_model
-        should_skip_pose = skip_pose is True or pose_model is None
+        should_skip_pose = skip_pose is True or (
+            skip_pose is None and pose_model is None and not selected_model.is_file()
+        )
         if not should_skip_pose and not selected_model.is_file():
             raise FileNotFoundError(f"pose model not found: {selected_model}")
 
@@ -160,6 +172,7 @@ class ServicioAnalisisVideo:
                              "vocalization_candidates": summary["vocalization_candidates"],
                              "movement_interaction_status": summary["movement_interaction_status"],
                              "artifact_validation": summary["artifact_validation"]},
+            "artifacts": summary.get("derived_artifacts", {}),
             "demuca": demuca,
             "model_predictions": model_predictions,
             "session_relative_path": f"dataset/dataset/sessions/{session_id}",

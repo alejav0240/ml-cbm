@@ -21,7 +21,7 @@ from typing import Any
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
-from analyze_video import analyze_video
+from pipeline_09_worker.entrypoints.analyze_video import analyze_video
 
 
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -163,6 +163,27 @@ def _mark_reused_stages(
                 message=None if movement_available else str(movement_status or "Sin pose"),
             )
 
+    artifacts = result.get("artifacts") or result.get("derived_artifacts") or {}
+    if isinstance(artifacts, dict):
+        for kind, artifact in artifacts.items():
+            if artifact is None:
+                continue
+            for stage_id in ("extraction", "segmentation", "pose", "audio", "movement", "validation", "inference", "demuca"):
+                if kind in {
+                    "stable_window_index" if stage_id == "segmentation" else "",
+                    "pose_landmarks" if stage_id == "pose" else "",
+                    "acoustic_features" if stage_id == "audio" else "",
+                    "vocalization_candidates" if stage_id == "audio" else "",
+                    "movement_interaction" if stage_id == "movement" else "",
+                    "multimodal_manifest" if stage_id == "validation" else "",
+                    "demuca_estimates" if stage_id == "demuca" else "",
+                    "demuca_draft" if stage_id == "demuca" else "",
+                }:
+                    stage = next(item for item in stages if item["id"] == stage_id)
+                    if kind not in stage["artifact_kinds"]:
+                        stage["artifact_kinds"].append(kind)
+                    break
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -222,8 +243,9 @@ class Orchestrator:
             "session_id": session_id,
             "video_path": video_path,
             "video_uri": video_uri,
-            "pose_model": _optional_path(payload.get("pose_model")),
-            "skip_pose": bool(payload.get("skip_pose", True)),
+            "pose_model": _optional_path(payload.get("pose_model"))
+            or _default_pose_model(self.project_root),
+            "skip_pose": bool(payload.get("skip_pose", False)),
         }
 
     def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -329,17 +351,29 @@ class Orchestrator:
                 semantic_status=semantic_status,
             )
         except Exception as error:
-            self._set_stage(
-                stages,
-                "validation",
-                status="failed",
-                message=str(error),
-                finished_at=_now(),
+            error_code = getattr(error, "code", type(error).__name__)
+            error_message = getattr(error, "user_message", str(error))
+            blocked = error_code == "insufficient_duration_for_window"
+            failed_stage = next(
+                (stage for stage in stages if stage["status"] == "running"),
+                None,
             )
+            if failed_stage is None:
+                failed_stage = next(
+                    (stage for stage in stages if stage["id"] == "validation"),
+                    None,
+                )
+            if failed_stage is not None:
+                failed_stage.update(
+                    status="blocked" if blocked else "failed",
+                    progress=0,
+                    message=error_message,
+                    finished_at=_now(),
+                )
             record = self.store.update(
                 run_id,
                 status="failed",
-                error={"code": type(error).__name__, "message": str(error)},
+                error={"code": error_code, "message": error_message},
                 pipeline_stages=stages,
             )
         finally:
@@ -363,6 +397,15 @@ class Orchestrator:
         callback_url: Any,
     ) -> None:
         record = self.store.update(run_id, pipeline_stages=stages)
+        current = next(
+            (stage for stage in reversed(stages) if stage["status"] in {"running", "completed", "failed", "blocked"}),
+            stages[0],
+        )
+        print(
+            f"[{run_id}] etapa {current['id']} ({current['label']}) "
+            f"{current['status']} {current['progress']}%",
+            flush=True,
+        )
         if isinstance(callback_url, str) and callback_url:
             self._callback(callback_url, record)
 
@@ -432,6 +475,16 @@ def _optional_path(value: Any) -> Path | None:
     if not path.is_file():
         raise ValueError("pose_model_not_found")
     return path
+
+
+def _default_pose_model(project_root: Path) -> Path | None:
+    for candidate in (
+        project_root / "artifacts" / "models" / "pose_landmarker.task",
+        project_root / "ml" / "artifacts" / "models" / "pose_landmarker.task",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -42,7 +42,7 @@ def run_existing_extraction(
     audio_features = features_dir / "audio_features.json"
     visual_features = features_dir / "visual_motion.json"
 
-    scripts_dir = project_root / "dataset" / "scripts"
+    scripts_dir = _resolve_dataset_scripts_dir(project_root)
 
     def invoke(script_name: str, force_overwrite: bool = False) -> None:
         command = [
@@ -95,6 +95,20 @@ def run_existing_extraction(
     if missing:
         raise RuntimeError("extraction did not produce required outputs: " + ", ".join(missing))
     return stages
+
+
+def _resolve_dataset_scripts_dir(project_root: Path) -> Path:
+    """Find dataset processing scripts for both monorepo and ML-only layouts."""
+    candidates = (
+        project_root / "dataset" / "scripts",
+        project_root.parent / "dataset" / "scripts",
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    # Preserve the canonical path for mocked/test environments. The subprocess
+    # error remains actionable when a real deployment omitted the scripts.
+    return candidates[0]
 
 
 def probe_duration(path: Path) -> float:
@@ -290,7 +304,12 @@ def normalize_manifest_fragments(
                 run_command([
                     "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                     "-i", str(source_audio), "-t", f"{duration:.9f}", "-vn",
-                    "-af", "asetpts=PTS-STARTPTS,aresample=16000",
+                    # Audio containers may end slightly before the manifest
+                    # because of codec priming. Pad the bounded tail with
+                    # silence so normalized audio shares the manifest clock.
+                    "-af",
+                    f"asetpts=PTS-STARTPTS,aresample=16000:async=1:first_pts=0,"
+                    f"apad=whole_dur={duration:.9f}",
                     "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio_part),
                 ])
             else:

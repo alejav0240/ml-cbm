@@ -5,10 +5,60 @@ from pathlib import Path
 from unittest.mock import patch
 
 import media_pipeline
-from media import synchronize_pose_with_segments
+from media import run_existing_extraction, synchronize_pose_with_segments
 
 
 class MediaPipelineTests(unittest.TestCase):
+    def test_extraction_uses_sibling_dataset_scripts_for_ml_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project_root = root / "ml"
+            session_id = "S001"
+            session = project_root / "dataset" / "dataset" / "sessions" / session_id
+            (session / "metadata").mkdir(parents=True)
+            (session / "metadata" / "session.json").write_text("{}", encoding="utf-8")
+            (session / "session_manifest.json").write_text(
+                json.dumps({"session_id": session_id}), encoding="utf-8"
+            )
+            (session / "processed" / "frames").mkdir(parents=True)
+            scripts = root / "dataset" / "scripts"
+            scripts.mkdir(parents=True)
+            for script_name in ("extraer_frames.py", "extraer_features.py"):
+                (scripts / script_name).touch()
+
+            commands = []
+
+            def fake_run(command, check):
+                self.assertTrue(check)
+                commands.append(command)
+                if command[1].endswith("extraer_frames.py"):
+                    (session / "processed" / "frames" / f"{session_id}_000001.jpg").touch()
+                else:
+                    features = session / "processed" / "features"
+                    features.mkdir(parents=True, exist_ok=True)
+                    (features / "audio_features.json").write_text("{}", encoding="utf-8")
+                    (features / "visual_motion.json").write_text("{}", encoding="utf-8")
+
+            with (
+                patch(
+                    "media.normalize_manifest_fragments",
+                    side_effect=lambda session_dir, manifest_path, *, overwrite: (
+                        (session_dir / "processed" / "video").mkdir(parents=True, exist_ok=True),
+                        (session_dir / "processed" / "audio").mkdir(parents=True, exist_ok=True),
+                        (session_dir / "processed" / "video" / f"{session_id}_1280x720_10fps.mp4").touch(),
+                        (session_dir / "processed" / "audio" / f"{session_id}_16khz_mono.wav").touch(),
+                        {"status": "executed", "session_id": session_id},
+                    )[-1],
+                ),
+                patch("media.subprocess.run", side_effect=fake_run),
+            ):
+                run_existing_extraction(session_id, project_root)
+
+            self.assertEqual(
+                [Path(command[1]) for command in commands],
+                [scripts / "extraer_frames.py", scripts / "extraer_features.py"],
+            )
+
     def test_audio_artifact_write_is_atomic_when_replacement_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_path = Path(temporary_directory) / "features" / "acoustic_features.json"

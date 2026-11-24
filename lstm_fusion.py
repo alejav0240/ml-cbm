@@ -44,6 +44,7 @@ class LSTMFusionModel(_TorchModule):
         hidden_size: int = 64,
         layers: int = 1,
         dropout: float = 0.0,
+        bidirectional: bool = False,
     ) -> None:
         torch, nn = _torch()
         super().__init__()
@@ -55,6 +56,8 @@ class LSTMFusionModel(_TorchModule):
             raise ValueError("dropout_must_be_in_range")
         self.modality_dimensions = dict(modality_dimensions)
         self.label_count = label_count
+        self.bidirectional = bidirectional
+        direction_count = 2 if bidirectional else 1
         self.input_size = sum(modality_dimensions.values()) + len(modality_dimensions)
         self.network = nn.LSTM(
             input_size=self.input_size,
@@ -62,8 +65,9 @@ class LSTMFusionModel(_TorchModule):
             num_layers=layers,
             dropout=dropout if layers > 1 else 0.0,
             batch_first=True,
+            bidirectional=bidirectional,
         )
-        self.classifier = nn.Linear(hidden_size, label_count)
+        self.classifier = nn.Linear(hidden_size * direction_count, label_count)
 
     def forward(self, sequences, lengths: Sequence[int] | None = None):
         """Return logits for one multilabel output per sequence."""
@@ -73,6 +77,8 @@ class LSTMFusionModel(_TorchModule):
         if lengths is None:
             _, state = self.network(sequences)
             final_state = state[0][-1]
+            if self.bidirectional:
+                final_state = torch.cat((state[0][-2], state[0][-1]), dim=1)
         else:
             if len(lengths) != sequences.shape[0] or any(
                 length <= 0 or length > sequences.shape[1] for length in lengths
@@ -84,6 +90,8 @@ class LSTMFusionModel(_TorchModule):
             )
             _, state = self.network(packed)
             final_state = state[0][-1]
+            if self.bidirectional:
+                final_state = torch.cat((state[0][-2], state[0][-1]), dim=1)
         return self.classifier(final_state)
 
     def probabilities(self, sequences, lengths: Sequence[int] | None = None):

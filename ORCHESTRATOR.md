@@ -1,6 +1,9 @@
 # DEMUCA ML orchestrator
 
-`orchestrator_service.py` is the asynchronous HTTP boundary between `backend-cbm` and the existing multimodal CLI. It does not replace the clinical backend or create DEMUCA clinical scores.
+`pipeline_09_worker/entrypoints/orchestrator_service.py` is the asynchronous HTTP boundary
+between `backend-cbm` and the existing multimodal pipeline. The root-level
+`orchestrator_service.py` remains as a compatibility entrypoint. The worker
+does not replace the clinical backend or create DEMUCA clinical scores.
 
 ## Endpoints
 
