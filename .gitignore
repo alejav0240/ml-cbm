@@ -13,6 +13,7 @@ env/
 .coverage
 htmlcov/
 artifacts/
+deployment/
 data/
 approvals.json
 mlflow.db

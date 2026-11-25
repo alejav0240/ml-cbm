@@ -90,6 +90,43 @@ local. Si MLflow no está disponible o la ejecución no tiene `mlflow_run_id`, l
 operación se bloquea y no modifica el registro local. La activación real sigue
 requiriendo `deploy`, que valida el snapshot y su SHA-256.
 
+## Despliegue por GitHub Actions
+
+El workflow `ml/.github/workflows/mlops.yml` ejecuta el camino productivo en
+`main` o `master`:
+
+```text
+dataset-ml@main
+  → entrenamiento con approvals.json protegido
+  → gate de micro-F1
+  → registro y snapshot SHA-256
+  → imagen ghcr.io/<owner>/<repo>-inference:<version>
+  → despliegue SSH en el servidor del backend
+  → /ready y rollback automático si el contenedor no inicia
+```
+
+El job de despliegue usa el environment protegido `production`. Configura en
+ese environment los secrets `ML_APPROVALS_JSON`, `ML_SERVICE_API_KEY`,
+`SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_HOST` y `SSH_USER`. La clave
+`ML_APPROVALS_JSON` no debe guardarse en el repositorio.
+
+Variables opcionales del environment:
+
+- `ML_MIN_MICRO_F1`: mínimo del gate de promoción, por defecto `0.70`.
+- `ML_DEPLOY_PATH`: directorio remoto, por defecto `/opt/cbm/ml`.
+- `ML_DOCKER_NETWORK`: red Docker compartida con el backend, por defecto
+  `cbm_default`.
+- `ML_CONTAINER_NAME`: nombre del contenedor, por defecto
+  `cbm-ml-inference`.
+- `ML_HEALTHCHECK_URL`: URL pública base; si existe se verifica
+  `<URL>/ready`.
+
+La red indicada en `ML_DOCKER_NETWORK` debe existir en el servidor y ser la
+misma red utilizada por los contenedores del backend. El backend/orquestador
+debe consumir `http://ml-inference:8010` y usar el mismo
+`ML_SERVICE_API_KEY`. Si la red no existe, el despliegue falla sin reemplazar
+el contenedor anterior.
+
 ## Servicio de inferencia
 
 El artefacto desplegado puede exponerse mediante el servicio HTTP autónomo:

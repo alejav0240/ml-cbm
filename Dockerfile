@@ -9,4 +9,6 @@ ENV PYTHONUNBUFFERED=1
 ENV ML_PRODUCTION_MODEL=/app/artifacts/production/model.json
 EXPOSE 8010
 
+COPY deployment/model.json deployment/deployment.json /app/artifacts/production/
+
 CMD ["python", "service.py", "--host", "0.0.0.0", "--port", "8010"]
